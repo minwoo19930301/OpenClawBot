@@ -126,20 +126,16 @@ const llm = createLlmFromEnv();
 
 控制台启动后打开 `http://127.0.0.1:<port>` 即可聊天（未配置 key 时回退 MockLlm）。
 
-## 桌面 EXE（不用 Electron）
+## 交付形态
 
-本项目无 Electron 依赖；浏览器控制面（apps/console）即为 shell。要打成 EXE 有
-以下路径，全部无需 Electron：
+本项目无 Electron 依赖，也不产出 EXE。交付形态：
 
-| 方案 | 体积 | 形态 | 说明 |
-|---|---|---|---|
-| **Node SEA**（推荐） | ~60-90 MB | 单 EXE，无窗口 | Node 官方 Single Executable Applications，`node --experimental-sea-config` 把 console 打成单 EXE，浏览器访问 |
-| **Bun compile** | ~90 MB | 单 EXE，无窗口 | `bun build --compile` 直接输出 EXE，启动更快 |
-| **Tauri 2** | ~5-10 MB | 原生窗口 | Rust 壳 + 系统 WebView2 加载控制面 UI，Node 后端作 sidecar/HTTP 服务 |
-| **Neutralinojs** | ~2-3 MB | 原生窗口 | 系统 WebView + Node 后端，最轻的带窗口方案 |
+- **CLI**：`npm run demo`（chat / a2a / group / broadcast / transcript 六命令）
+- **浏览器控制面**：`npm run console` 启动 HTTP + SSE 控制面（apps/console），
+  浏览器访问 `http://127.0.0.1:<port>` 即可与 agent 群聊天、发 A2A、广播、看实时事件流
 
-> 架构上 shell 与运行时解耦：控制面只通过 HTTP/SSE 说话，所以换任何壳都
-> 不需要改动 packages/* 一行代码。
+架构上 shell 与运行时解耦：控制面只通过 HTTP/SSE 说话，所以未来换任何壳
+（Node SEA、Bun compile、Tauri 等）都不需要改动 packages/* 一行代码。
 
 ## 包结构
 

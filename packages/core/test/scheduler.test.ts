@@ -190,3 +190,20 @@ test("lifecycle attaches to scheduler and retires acks", async () => {
   });
   assert.equal(lifecycle.outstandingAcks().length, 0);
 });
+
+test("run lifecycle: ack re-drive fires only when idle and acks outstanding", () => {
+  const redriven: string[] = [];
+  const lc = new RunLifecycle({
+    onAckRedriveScheduled: (agentId, count) => redriven.push(`${agentId}:${count}`),
+  });
+  lc.mintAck("a1", "nonce-1");
+  lc.beginSessionRun("a1", "user");
+  lc.scheduleAckRedriveAfterIdle("a1"); // busy -> no fire
+  assert.deepEqual(redriven, []);
+  lc.endSessionRun("a1"); // idle, ack still owed
+  lc.scheduleAckRedriveAfterIdle("a1");
+  assert.deepEqual(redriven, ["a1:1"]);
+  lc.retireAck("nonce-1");
+  lc.scheduleAckRedriveAfterIdle("a1"); // no ack -> no fire
+  assert.deepEqual(redriven, ["a1:1"]);
+});

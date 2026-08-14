@@ -93,6 +93,22 @@ export async function startConsole(options: ConsoleOptions = {}): Promise<Runnin
         });
         res.write("retry: 1000\n\n");
         sseClients.add(res);
+        // Roster re-seed on every (re)connect, mirroring the original's
+        // agents-roster-seed: the client refreshes its agent list after any
+        // stream drop and reconnect.
+        void (async () => {
+          try {
+            const ids = await runtime.listAgentIds();
+            const agents = [];
+            for (const id of ids) {
+              const session = await runtime.getSession(id);
+              agents.push({ id, name: session.name, isGroup: session.isGroup });
+            }
+            res.write(`data: ${JSON.stringify({ kind: "roster-seed", agents })}\n\n`);
+          } catch {
+            // best-effort; the client re-requests /api/agents anyway
+          }
+        })();
         req.on("close", () => sseClients.delete(res));
         return;
       }
@@ -104,6 +120,10 @@ export async function startConsole(options: ConsoleOptions = {}): Promise<Runnin
           agents.push({ id, name: session.name, isGroup: session.isGroup });
         }
         respond(res, 200, agents);
+        return;
+      }
+      if (url.pathname === "/api/health" && req.method === "GET") {
+        respond(res, 200, { ok: true, pid: process.pid });
         return;
       }
       if (url.pathname === "/api/transcript" && req.method === "GET") {
@@ -215,7 +235,7 @@ export async function main(): Promise<void> {
   });
 }
 
-if (process.argv[1] != null && import.meta.url === new URL(`file:///${process.argv[1].replace(/\\/g, "/")}`).href) {
+if (process.argv[1] != null && process.env.OPEN_GROKBOT_NO_CLI !== "1" && import.meta.url === new URL(`file:///${process.argv[1].replace(/\\/g, "/")}`).href) {
   main().catch((error) => {
     console.error(error);
     process.exitCode = 1;

@@ -2,6 +2,7 @@
   "name": "open-grokbot",
   "version": "0.1.0",
   "private": true,
+  "license": "GPL-3.0-only",
   "description": "Open-source multi-agent coordination framework, clean-room reimplementation of the architecture of a modern desktop agent platform (Grok Bot class). No proprietary code included.",
   "type": "module",
   "workspaces": [
@@ -19,6 +20,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "esbuild": "^0.28.2",
     "typescript": "^5.7.0"
   }
 }

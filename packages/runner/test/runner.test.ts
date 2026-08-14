@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -149,5 +150,44 @@ test("runner interrupt aborts an in-flight completion", async () => {
     assert.ok(true, "interrupt settled the run");
   } finally {
     await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("end-to-end: user message supersedes an in-flight group conversation", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ogb-group-supersede-"));
+  let memberTurns = 0;
+  const runtime = new SessionRuntime({
+    rootDir: dir,
+    llmFor: () => new MockLlm({ latencyMs: 5 }),
+    onMessage: () => {},
+  });
+  try {
+    await runtime.createAgent({ id: "alpha", name: "Alpha" });
+    await runtime.createAgent({ id: "beta", name: "Beta" });
+    await runtime.createAgent({ id: "g1", name: "Squad", isGroup: true });
+    // Slow member runners so the round is still in flight when the user sends.
+    runtime.groupMemberRunners.set("alpha", {
+      runGroupMemberTurn: async () => {
+        memberTurns += 1;
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        return ["hello"];
+      },
+    });
+    runtime.groupMemberRunners.set("beta", {
+      runGroupMemberTurn: async () => {
+        memberTurns += 1;
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        return ["hello too"];
+      },
+    });
+    const groupRun = runtime.runGroupConversation({ groupId: "g1", memberIds: ["alpha", "beta"] });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    // A new user message to the room bumps the epoch: the round bails.
+    await runtime.sendUserPrompt("g1", "stop, new direction");
+    await groupRun;
+    assert.ok(memberTurns <= 2, `member turns ran ${memberTurns} times`);
+  } finally {
+    runtime.dispose();
+    rmSync(dir, { recursive: true, force: true });
   }
 });

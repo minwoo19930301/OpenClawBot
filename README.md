@@ -1,60 +1,73 @@
 # Open-Grokbot
 
-[English](#english) | 中文
+[简体中文](README.zh.md)
 
-开源的多 agent 通信与协调框架 —— 对现代桌面 agent 平台（Grok Bot 类）架构的**全量还原实现**。
-以逆向工程得到的架构为蓝图，完整重建其多 agent 系统的每一层：进程拓扑、端口协议、SSE 网关、排他调度、消息协议、群聊编排、跨用户房间、云 agent 桥、幂等账本与持久化状态。
+An open-source multi-agent communication & coordination framework — a **full architectural re-implementation** of a modern desktop agent platform (Grok Bot class). Blueprinted from reverse-engineered architecture, it rebuilds every layer of the multi-agent system: process topology, port protocols, SSE gateway, exclusive scheduling, messaging protocols, group-chat orchestration, cross-user rooms, a cloud-agent bridge, idempotent ledgers and persistent state.
 
-> 本仓库为独立实现。Grok Bot、Cursor 及其相关名称、商标归其各自所有者所有；本项目的代码、命名与文档仅作架构研究与工程参考。
+> ## ⚠️ Important notice
+>
+> **This project is a reverse-engineered re-implementation, NOT the original source code.**
+> The code in this repository is written from scratch (clean-room reimplementation) based on
+> static reverse-engineering of the Grok Bot binary (and the Cursor build chain it is based on):
+> unpacking, sourcemap recovery and architecture analysis. It contains no source code,
+> assets or proprietary material from the original product; the architecture and protocols
+> are independently implemented with reference to the observed public behavior.
+>
+> **License: GNU GPL v3 only (SPDX: GPL-3.0-only)** — see [LICENSE](LICENSE).
+>
+> Grok Bot, Cursor and their names, trademarks and logos belong to their respective owners.
+> This project claims no rights over those names/trademarks and has no affiliation with the
+> original product. Code, naming and docs here serve architectural study and engineering
+> reference only.
 
-## 架构总览
+## Architecture overview
 
 ```mermaid
 flowchart TB
-    subgraph Client["桌面 / CLI 客户端"]
-        UI["用户界面 (demo CLI)"]
+    subgraph Client["Desktop / CLI client"]
+        UI["UI (demo CLI / browser console)"]
     end
 
-    subgraph Coord["协调器进程 (packages/coordinator)"]
+    subgraph Coord["Coordinator process (packages/coordinator)"]
         direction TB
-        PLANES["三平面端口会话<br/>control · data · mainData"]
-        CARRIER["载体：parent-port（三 MessagePort handoff）<br/>fork-ipc（单管道 {channel} 多路复用）"]
-        SUPERVISE["host 监督：退出码契约 0/1/2 · 指数退避重启"]
-        WA["WebAuthn provider 契约"]
+        PLANES["3-plane port sessions<br/>control · data · mainData"]
+        CARRIER["carriers: parent-port (3 MessagePort handoff)<br/>fork-ipc (single pipe {channel} mux)"]
+        SUPERVISE["host supervision: exit-code contract 0/1/2 · backoff restart"]
+        WA["WebAuthn provider contract"]
     end
 
-    subgraph Transp["传输层 (packages/transport)"]
-        PORT["MessagePort 帧协议<br/>PortServer / PortClient<br/>lifecycle · request · reply · event"]
-        GATEWAY["网关<br/>GatewaySseClient / GatewaySseServer<br/>POST /api/* · GET /events (SSE)"]
-        LE["LocalExecClient / Daemon<br/>10s 心跳 · 30s 存活 · 10s 响应超时"]
+    subgraph Transp["Transport (packages/transport)"]
+        PORT["MessagePort frame protocol<br/>PortServer / PortClient<br/>lifecycle · request · reply · event"]
+        GATEWAY["gateway<br/>GatewaySseClient / GatewaySseServer<br/>POST /api/* · GET /events (SSE)"]
+        LE["LocalExecClient / Daemon<br/>10s heartbeat · 30s liveness · 10s timeout"]
     end
 
-    subgraph Host["Agent 运行时 (packages/runner)"]
-        SCHED["排他调度内核 (packages/core)<br/>RunScheduler · 三 lane 优先级<br/>watchdog · zombie 逃逸"]
-        LIFECYCLE["RunLifecycle · ack 义务"]
-        MSG["消息层 (packages/messaging)"]
-        A2A["AgentToAgentMessaging<br/>pendingAgentInbound · 唤醒 · priority steer"]
-        GROUP["GroupChatOrchestrator<br/>有界轮转 · @提及 · pass 收敛"]
+    subgraph Host["Agent runtime (packages/runner)"]
+        SCHED["scheduling core (packages/core)<br/>RunScheduler · 3-lane priority<br/>watchdog · zombie escape"]
+        LIFECYCLE["RunLifecycle · ack obligations"]
+        MSG["messaging (packages/messaging)"]
+        A2A["AgentToAgentMessaging<br/>pendingAgentInbound · wake · priority steer"]
+        GROUP["GroupChatOrchestrator<br/>bounded rounds · @mentions · pass convergence"]
         BC["BroadcastMessaging"]
         SUB["SubagentRuntime<br/>lineage · steer · abort"]
-        XUSER["CrossUserRelay<br/>turn-request/result · 预算 · nonce 幂等"]
-        CLOUD["CloudAgentBridge<br/>launch/reply/cancel · 轮询 · 限速退避"]
-        STATE["状态层 (packages/state)"]
-        TX["TranscriptStore<br/>JSONL 持久化 · fromAgent/toAgent"]
-        LEDGER["AcceptanceLedger<br/>nonce + digest 幂等账本"]
+        XUSER["CrossUserRelay<br/>turn-request/result · budget · nonce idempotency"]
+        CLOUD["CloudAgentBridge<br/>launch/reply/cancel · poll · rate-limit backoff"]
+        STATE["state (packages/state)"]
+        TX["TranscriptStore<br/>JSONL persistence · fromAgent/toAgent"]
+        LEDGER["AcceptanceLedger<br/>nonce + digest idempotent ledger"]
         MEM["MemoryStore"]
         AUTO["AutomationStore + Scheduler"]
-        ASTORE["AgentStore<br/>profile/settings/group 目录模型"]
-        BCS["AgentStoreSync (BCS)<br/>etag · 排他锁 · 冲突 merge"]
-        RUNNER["AgentRunner · SendMessage 解析"]
-        LLM["MockLlm / Llm 接口"]
+        ASTORE["AgentStore<br/>profile/settings/group directory model"]
+        BCS["AgentStoreSync (BCS)<br/>etag · exclusive lock · conflict merge"]
+        RUNNER["AgentRunner · SendMessage extraction"]
+        LLM["MockLlm / Llm interface"]
     end
 
     UI -->|user commands| PLANES
     PLANES --> CARRIER
-    CARRIER -->|帧协议| PORT
-    PORT -->|命令转发| GATEWAY
-    GATEWAY -->|SSE 事件流| SCHED
+    CARRIER -->|frame protocol| PORT
+    PORT -->|command forwarding| GATEWAY
+    GATEWAY -->|SSE event stream| SCHED
     SUPERVISE -. supervise .-> HOST
     SCHED --> LIFECYCLE
     SCHED --> MSG
@@ -75,17 +88,17 @@ flowchart TB
     GATEWAY --> LE
 ```
 
-## 快速开始
+## Quick start
 
 ```bash
 npm install
-npm run build          # 全量构建（tsc 项目引用）
-npm test               # 全量测试（node:test）
-npm run demo           # 运行完整演示：用户对话 + A2A + 群聊 + 广播
-npm run start -w @open-grokbot/console   # 启动浏览器控制面（无 Electron）
+npm run build          # full build (tsc project references)
+npm test               # all tests (node:test)
+npm run demo           # full demo: user chat + A2A + group chat + broadcast
+npm run start -w @open-grokbot/console   # browser control plane (no Electron)
 ```
 
-演示输出示例：
+Sample demo output:
 
 ```
 --- 2. agent-to-agent: Alpha -> Beta ---
@@ -97,13 +110,13 @@ npm run start -w @open-grokbot/console   # 启动浏览器控制面（无 Electr
   ...
 ```
 
-## 接入真实 LLM（支持所有模型）
+## Real LLM integration (any model)
 
 ```ts
 import { createLlm, createLlmFromEnv } from "@open-grokbot/llm";
 
-// OpenAI 兼容协议：覆盖 OpenAI / DeepSeek / 豆包 / Moonshot / GLM / Grok /
-// Ollama / vLLM 及一切 OpenAI 兼容端点
+// OpenAI-compatible protocol: OpenAI / DeepSeek / Doubao / Moonshot / GLM /
+// Grok / Ollama / vLLM and every OpenAI-compatible endpoint
 const deepseek = createLlm({
   provider: "openai-compatible",
   baseUrl: "https://api.deepseek.com/v1",
@@ -111,91 +124,35 @@ const deepseek = createLlm({
   model: "deepseek-chat",
 });
 
-// Anthropic 协议
+// Anthropic protocol
 const claude = createLlm({
   provider: "anthropic",
   apiKey: process.env.ANTHROPIC_API_KEY!,
   model: "claude-sonnet-4-5",
 });
 
-// 环境变量驱动（console 默认路径）
+// Environment-driven (the console's default path)
 // LLM_PROVIDER=anthropic  ANTHROPIC_API_KEY=…  ANTHROPIC_MODEL=…
-// 或（默认）OPENAI_API_KEY=…  OPENAI_BASE_URL=…  OPENAI_MODEL=…
+// or (default) OPENAI_API_KEY=…  OPENAI_BASE_URL=…  OPENAI_MODEL=…
 const llm = createLlmFromEnv();
 ```
 
-控制台启动后打开 `http://127.0.0.1:<port>` 即可聊天（未配置 key 时回退 MockLlm）。
+Start the console and open `http://127.0.0.1:<port>` to chat (falls back to MockLlm when no key is configured).
 
-## 交付形态
+## Delivery form
 
-本项目无 Electron 依赖，也不产出 EXE。交付形态：
+No Electron dependency and no EXE output. Two surfaces:
 
-- **CLI**：`npm run demo`（chat / a2a / group / broadcast / transcript 六命令）
-- **浏览器控制面**：`npm run console` 启动 HTTP + SSE 控制面（apps/console），
-  浏览器访问 `http://127.0.0.1:<port>` 即可与 agent 群聊天、发 A2A、广播、看实时事件流
+- **CLI**: `npm run demo` — chat / a2a / group / broadcast / transcript
+- **Browser control plane**: `npm run console` — HTTP + SSE server (apps/console);
+  open the printed URL to chat with the agents, send A2A messages, broadcast,
+  and watch the live event stream
 
-架构上 shell 与运行时解耦：控制面只通过 HTTP/SSE 说话，所以未来换任何壳
-（Node SEA、Bun compile、Tauri 等）都不需要改动 packages/* 一行代码。
+The shell is decoupled from the runtime: the control plane only speaks HTTP/SSE,
+so swapping in any other shell (Node SEA, Bun compile, Tauri, …) later requires
+no changes inside packages/*.
 
-## 包结构
-
-| 包 | 职责 | 对应原版 |
-|---|---|---|
-| `@open-grokbot/core` | 排他运行队列（三 lane 优先级）、watchdog 逃逸、run 生命周期、重试/期限/空闲策略、事件总线 | dune scheduling + RunScheduler/RunLifecycle |
-| `@open-grokbot/coordinator` | 协调器进程：三平面端口、双载体（parent-port / fork-ipc）、host 监督退出码契约、RPC 契约、WebAuthn | node-agent-coordinator / carrier / gateway-event-families |
-| `@open-grokbot/transport` | MessagePort 帧协议（会话/违约/结算）、HTTP+SSE 网关（客户端与服务端）、16 事件族映射、local-exec 通道 | renderer-port-server / gateway-client / gateway-server / local-exec-gateway |
-| `@open-grokbot/state` | transcript（JSONL）、acceptance 幂等账本、memory、automations、agent 目录存储、BCS 多端同步 | transcript / send-acceptance / memory / automations / agent-store-sync |
-| `@open-grokbot/messaging` | A2A 私聊（队列+唤醒+优先级中断）、群聊编排、广播、subagent 运行时、跨用户房间 relay、云 agent 桥 | agent-to-agent-messaging / group-chat-orchestrator / background-wakes / subagent-runtime / cross-user-sharing / cloud-agents |
-| `@open-grokbot/llm` | LLM 抽象 + 规则驱动 mock | chat-inference 适配层 |
-| `@open-grokbot/runner` | turn 执行（SendMessage 提取）、SessionRuntime 装配根、GroupMemberRunner | sand-agent-runner / host 组合根 |
-| `@open-grokbot/demo` | CLI：chat / a2a / group / broadcast / transcript | — |
-
-## 核心机制
-
-- **排他运行队列**：每个 agent 一个队列，同一时刻一个活跃 turn；`user > agent > background` 三 lane 优先级，用户消息永远最先。
-- **watchdog 逃逸**：卡死 run 进入 grace 窗口后被逃逸为 zombie——调用方 promise 立即返回（发送永不悬挂），删除/排空仍等待其真正结束。
-- **A2A 消息**：fire-and-forget + 对称唤醒；priority 消息可中断接收方非用户工作（steer）；DM 抢占后 at-least-once 重驱（isRedriven 防环）；双侧 transcript 镜像 + 社交图谱。
-- **群聊编排**：有界轮转（消息上限/轮次上限/全员 pass 收敛/用户消息 supersede），@提及路由，每成员独立会话状态。
-- **跨用户共享房间**：hosted/mirror 房间、turn-request/turn-result 协议、10 分钟窗口 30 次预算、不可达退避、nonce 幂等。
-- **云 agent 桥**：launch/reply/cancel/rename、10s 轮询、30s RPC 超时、5h 上限、60s±25% 限速抖动。
-- **幂等发送**：clientNonce + inputDigest 持久化账本，超时重试零双发；durable acceptance 使发送与执行解耦。
-- **广播**：用户→全员单向扇出，顺序调度、并发执行、无环。
-- **subagent**：父 agent 派生的后台 run，lineage 世系、steer 转向、abort 中止。
-- **多端同步（BCS）**：etag 条件写、排他变更锁、冲突 merge，两设备编辑同一 agent 收敛不覆盖。
-- **持久化**：每 agent 独立目录（transcript.jsonl / memory.json / automations.json / profile.json / settings.json / group.json）。
-
-## 文档
-
-- [架构文档](docs/architecture.md) —— 进程拓扑、分层、数据流、消息路径（含多张时序图）
-- [协议规范](docs/protocol.md) —— 帧协议、SSE wire、A2A/群聊/广播/xuser/云 agent 契约、幂等账本
-- [还原度矩阵](docs/restoration-matrix.md) —— 原版模块 ↔ 实现文件 ↔ 测试覆盖 对照表
-
-## 测试
-
-```bash
-npm test
-```
-
-覆盖：lane 优先级、排他性、watchdog 逃逸与 drain、端口协议违约、SSE 重连与 sendPrompt 幂等重试、transcript 持久化、账本去重/摘要不匹配/重启存活、A2A 唤醒/优先级中断、群聊收敛/上限、广播、subagent 生命周期、协调器双载体、跨用户 relay 预算/退避/幂等、云 agent 桥生命周期、local-exec 心跳/超时、BCS 冲突/锁、端到端（用户→agent、A2A 唤醒回复、群聊）。
-
-## 路线图
-
-- [ ] 真 LLM 接入（OpenAI/Anthropic 兼容）
-- [ ] Web UI（transcript 渲染、群聊视图、社交图谱）
-- [ ] Electron shell（utilityProcess 真实三端口接入）
-- [ ] 云 agent gRPC 客户端（真实 proto 契约）
-
----
-
-<a name="english"></a>
-
-## Open-Grokbot (English)
-
-An open-source multi-agent communication & coordination framework — a **full architectural re-implementation** of a modern desktop agent platform (Grok Bot class). Blueprinted from reverse-engineered architecture, it rebuilds every layer of the multi-agent system: process topology, port protocols, SSE gateway, exclusive scheduling, messaging protocols, group-chat orchestration, cross-user rooms, a cloud-agent bridge, idempotent ledgers and persistent state.
-
-> Independent implementation. Grok Bot, Cursor and related names/trademarks belong to their respective owners; code, naming and docs here serve architectural study and engineering reference only.
-
-### Packages
+## Packages
 
 | Package | Responsibility | Original counterpart |
 |---|---|---|
@@ -204,25 +161,46 @@ An open-source multi-agent communication & coordination framework — a **full a
 | `@open-grokbot/transport` | MessagePort frame protocol, HTTP+SSE gateway, 16 event families, local-exec channel | renderer-port-server / gateway-client / gateway-server |
 | `@open-grokbot/state` | Transcript (JSONL), acceptance ledger, memory, automations, agent store, BCS multi-device sync | transcript / send-acceptance / agent-store-sync |
 | `@open-grokbot/messaging` | A2A DMs, group orchestration, broadcast, subagent runtime, cross-user relay, cloud-agent bridge | agent-to-agent-messaging / group-chat-orchestrator / cross-user-sharing / cloud-agents |
-| `@open-grokbot/llm` | LLM abstraction + deterministic mock | chat-inference adapter |
+| `@open-grokbot/llm` | LLM abstraction, OpenAI-compatible + Anthropic providers, deterministic mock | chat-inference adapter |
 | `@open-grokbot/runner` | Turn execution, SendMessage extraction, SessionRuntime composition root | sand-agent-runner / host composition |
 | `@open-grokbot/demo` | CLI: chat / a2a / group / broadcast / transcript | — |
+| `@open-grokbot/console` | Browser control plane: HTTP API + SSE live feed + embedded chat UI | — |
 
-### Quick start
+## Core mechanisms
 
-```bash
-npm install
-npm run build
-npm test            # 65 tests across 7 packages
-npm run demo
-```
+- **Exclusive run queue**: one queue per agent, one active turn at a time; `user > agent > background` lane priority keeps user messages first.
+- **Watchdog escape**: wedged runs escape after the grace window into a zombie — the caller's promise settles immediately (sends never hang), while drain/delete still wait for the true stop.
+- **A2A messages**: fire-and-forget + symmetric wake; priority messages interrupt non-user work (steer); DM preemption re-drives at-least-once (isRedriven guards loops); both transcripts mirror the exchange + social graph.
+- **Group chat**: bounded rounds (message cap / round cap / pass convergence / user supersede), @mention routing, per-member session state.
+- **Cross-user rooms**: hosted/mirror rooms, turn-request/turn-result protocol, 30 turns / 10 min budget, unreachable backoff, nonce idempotency.
+- **Cloud-agent bridge**: launch/reply/cancel/rename, 10s poll, 30s RPC timeout, 5h cap, 60s±25% rate-limit jitter.
+- **Idempotent sends**: clientNonce + inputDigest persistent ledger; timeouts never double-send; durable acceptance decouples send from execution.
+- **Broadcast**: one-way user→agents fan-out, sequential scheduling, concurrent execution, no loops.
+- **Subagent**: parent-derived background runs with lineage, steer and abort.
+- **Multi-device sync (BCS)**: etag conditional writes, exclusive mutation lock, merge-on-conflict.
+- **Persistence**: per-agent directory (transcript.jsonl / memory.json / automations.json / profile.json / settings.json / group.json).
 
-### Documentation
+## Documentation
 
 - [Architecture](docs/architecture.md) — process topology, layering, data flows, sequence diagrams
 - [Protocol](docs/protocol.md) — frame protocol, SSE wire, A2A/group/broadcast/xuser/cloud contracts
 - [Restoration matrix](docs/restoration-matrix.md) — original module ↔ implementation ↔ test coverage
 
-### License
+## Tests
 
-MIT
+```bash
+npm test
+```
+
+Covers: lane priority, exclusivity, watchdog escape + drain, port protocol breaches, SSE reconnect + idempotent sendPrompt retry, transcript persistence, ledger dedupe/digest-mismatch/restart survival, A2A wake + priority interrupt, group convergence/caps, broadcast, subagent lifecycle, coordinator dual carriers, cross-user relay budget/backoff/idempotency, cloud-agent lifecycle, local-exec heartbeat/timeout, BCS conflicts/locks, LLM provider wire formats, e2e (user→agent, A2A wake→reply, group chat). 84 tests across 8 packages.
+
+## Roadmap
+
+- [x] Real LLM integration (OpenAI-compatible + Anthropic)
+- [x] Browser control plane (HTTP + SSE, no Electron)
+- [ ] Web UI polish (transcript rendering, group view, social graph)
+- [ ] Coordinator as a real utility process (Electron) — or any other shell via the decoupled HTTP/SSE surface
+
+## License
+
+GNU GPL v3 only (SPDX: GPL-3.0-only)

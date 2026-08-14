@@ -113,3 +113,32 @@ test("console: SSE live feed streams send events", async () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("console: SSE stream seeds the roster on connect", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "ogb-console-seed-"));
+  const console = await startConsole({
+    dataDir: dir,
+    llm: new MockLlm({}),
+    seedAgents: [{ id: "alpha", name: "Alpha" }],
+  });
+  try {
+    const base = console.url;
+    const abort = new AbortController();
+    const res = await fetch(`${base}/events`, { signal: abort.signal });
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let joined = "";
+    for (let i = 0; i < 10; i += 1) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      joined += decoder.decode(value);
+      if (joined.includes("roster-seed")) break;
+    }
+    abort.abort();
+    assert.ok(joined.includes("roster-seed"), joined);
+    assert.ok(joined.includes("alpha"), joined);
+  } finally {
+    await console.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

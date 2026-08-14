@@ -22,6 +22,8 @@ export interface RunLifecycleOptions {
   readonly onAckMinted?: (obligation: AckObligation) => void;
   /** Called when an ack obligation is retired. */
   readonly onAckRetired?: (obligation: AckObligation) => void;
+  /** Called when an idle agent still owes acks (bounded re-drive hook). */
+  readonly onAckRedriveScheduled?: (agentId: string, outstanding: number) => void;
 }
 
 export class RunLifecycle {
@@ -33,12 +35,14 @@ export class RunLifecycle {
   private readonly onTurnCompleted?: RunLifecycleOptions["onTurnCompleted"];
   private readonly onAckMinted?: RunLifecycleOptions["onAckMinted"];
   private readonly onAckRetired?: RunLifecycleOptions["onAckRetired"];
+  private readonly onAckRedriveScheduled?: RunLifecycleOptions["onAckRedriveScheduled"];
 
   constructor(options: RunLifecycleOptions = {}) {
     this.now = options.now ?? (() => Date.now());
     this.onTurnCompleted = options.onTurnCompleted;
     this.onAckMinted = options.onAckMinted;
     this.onAckRetired = options.onAckRetired;
+    this.onAckRedriveScheduled = options.onAckRedriveScheduled;
   }
 
   beginSessionRun(agentId: string, source: string): void {
@@ -104,6 +108,21 @@ export class RunLifecycle {
 
   outstandingAcks(): readonly AckObligation[] {
     return [...this.acks.values()];
+  }
+
+  /** Ack obligations still owed by an agent. */
+  outstandingAcksFor(agentId: string): readonly AckObligation[] {
+    return this.outstandingAcks().filter((obligation) => obligation.agentId === agentId);
+  }
+
+  /** Bounded re-drive hook (mirrors scheduleAckRedriveAfterIdle): when the
+   * agent just went fully idle and still owes acks, ask the owner to re-drive
+   * the delivery. The owner decides whether and how to retry. */
+  scheduleAckRedriveAfterIdle(agentId: string): void {
+    if (this.isRunning(agentId)) return;
+    const outstanding = this.outstandingAcksFor(agentId);
+    if (outstanding.length === 0) return;
+    this.onAckRedriveScheduled?.(agentId, outstanding.length);
   }
 
   /** Wire the lifecycle into a scheduler: every enqueue begins a run window,

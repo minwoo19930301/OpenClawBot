@@ -198,13 +198,14 @@ export class SessionRuntime implements AgentSessionRegistry {
       ...(nonce != null ? { clientNonce: nonce } : {}),
     };
     await session.appendTranscriptEntry(entry);
+    // Supersede: bump the epoch FIRST (a room message supersedes an in-flight
+    // group round even though rooms have no runner), then interrupt an
+    // in-flight user turn, then let queued stale turns skip themselves.
+    const epoch = (this.epochs.get(agentId) ?? 0) + 1;
+    this.epochs.set(agentId, epoch);
     const runner = this.runners.get(agentId);
     if (runner == null) return;
 
-    // Supersede: bump the epoch, interrupt an in-flight user turn, and let
-    // queued stale turns skip themselves when they finally run.
-    const epoch = (this.epochs.get(agentId) ?? 0) + 1;
-    this.epochs.set(agentId, epoch);
     if (this.scheduler.getActiveLane(agentId) === "user") {
       const interrupted = runner.interrupt("superseded");
       if (interrupted) {
@@ -259,9 +260,13 @@ export class SessionRuntime implements AgentSessionRegistry {
     onMemberMessage?: (member: string, content: string) => void;
   }): Promise<void> {
     const group = await this.getSession(args.groupId);
+    // Supersede guard: a new user message bumps the group's epoch; the
+    // orchestrator bails at the next member boundary (user supersede).
+    const epochAtStart = this.epochs.get(args.groupId) ?? 0;
     await this.groupChat.run({
       group: { name: group.name, description: "" },
       memberIds: args.memberIds,
+      isCurrent: () => (this.epochs.get(args.groupId) ?? 0) === epochAtStart,
       onMemberMessage: async (member, content) => {
         // Every posted member message lands on the room transcript, tagged
         // with the speaking member (fromAgent) so the room reads as a chat.

@@ -47,9 +47,9 @@ export class OpenClawHttpAdapter {
     signal?.addEventListener("abort", abort, { once: true });
     try {
       const input = [
-        ...(request.system ? [{ role: "system", content: String(request.system).slice(0, MAX_TEXT) }] : []),
-        ...(request.context ? [{ role: "developer", content: String(request.context).slice(0, MAX_TEXT) }] : []),
-        { role: "user", content: String(request.user ?? "").slice(0, MAX_TEXT) },
+        ...(request.system ? [{ type: "message", role: "system", content: String(request.system).slice(0, MAX_TEXT) }] : []),
+        ...(request.context ? [{ type: "message", role: "developer", content: String(request.context).slice(0, MAX_TEXT) }] : []),
+        { type: "message", role: "user", content: String(request.user ?? "").slice(0, MAX_TEXT) },
       ];
       const browser = request?.browser;
       let actions = 0;

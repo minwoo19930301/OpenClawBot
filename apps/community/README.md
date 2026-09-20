@@ -28,7 +28,7 @@ npm run build -w @open-grokbot/runner -w @open-grokbot/llm -w @open-grokbot/comm
 npm start -w @open-grokbot/community
 ```
 
-환경 변수 예시는 `.env.example`에 있습니다. 파일을 자동으로 읽지 않으므로 실행 환경이나 서비스 관리자로 값을 전달하세요. 첫 가입에는 `COMMUNITY_BOOTSTRAP_TOKEN`이 필요하고, 이후에는 관리자 가입 초대를 사용합니다. 실제 모델 연결에는 `COMMUNITY_LLM_BASE_URL`, `COMMUNITY_LLM_MODEL`, `COMMUNITY_LLM_API_KEY`가 모두 필요합니다. 모델 환경 변수와 provider/API key는 저장소에 넣지 않습니다. 세 값을 비워 두면 외부 LLM 비용 없이 사람 간 대화만 사용할 수 있습니다.
+환경 변수 예시는 `.env.example`에 있습니다. 파일을 자동으로 읽지 않으므로 실행 환경이나 서비스 관리자로 값을 전달하세요. 첫 가입에는 `COMMUNITY_BOOTSTRAP_TOKEN`이 필요하고, 이후에는 관리자 가입 초대를 사용합니다. OpenClaw 연결에는 `COMMUNITY_OPENCLAW_BASE_URL`과 `COMMUNITY_OPENCLAW_TOKEN`을 사용합니다. 직접 모델을 연결하려면 `COMMUNITY_LLM_BASE_URL`, `COMMUNITY_LLM_MODEL`, `COMMUNITY_LLM_API_KEY`가 모두 필요합니다. 두 연결 방식이 모두 설정되면 OpenClaw를 우선합니다. 모델 환경 변수와 provider/API key는 저장소에 넣지 않습니다. 두 백엔드 모두 비활성화하면 모델 호출 없이 사람 간 대화만 사용할 수 있습니다.
 
 `COMMUNITY_DEMO=1`은 외부 모델을 호출하지 않는 기능 확인용 모드입니다. 사람끼리의 대화는 모델 연결 없이도 사용할 수 있고, 봇 요청은 연결 필요 오류를 표시합니다.
 
@@ -42,7 +42,7 @@ npm start -w @open-grokbot/community
 
 ## 배포
 
-Docker/OCI 예시는 [deploy/README.md](deploy/README.md)에 있습니다. 실제 host, region, resource shape, room mapping, secret 값은 운영 환경에서만 관리하고 저장소에는 기록하지 않습니다. 배포 전에는 공개 프록시, server-only 환경 변수, 데스크톱 provision과 방 map을 별도로 검증하세요.
+Docker/OCI 예시는 [deploy/README.md](deploy/README.md)에 있습니다. 공개 데모의 주소와 배포 구성은 재현을 위해 문서에 포함하며, 비밀 키·초대 토큰·개인 데이터는 서버에서만 관리합니다. 다른 서버에 배포할 때는 Caddy 주소, 방 UUID, 네트워크와 데스크톱 map을 함께 조정하세요.
 
 ## 검증
 
@@ -54,4 +54,4 @@ npm test -w @open-grokbot/community
 
 ## 라이선스와 attribution
 
-GNU GPL v3 only (SPDX: GPL-3.0-only). 이 앱은 [Open-Grokbot upstream](https://github.com/LING71671/open-grokbot)을 명시적으로 참고한 독립 clean-room 구현이며, upstream 원본 소스·자산·비공개 자격 증명을 포함하지 않습니다.
+GNU GPL v3 only (SPDX: GPL-3.0-only). 공개 [Open-Grokbot upstream](https://github.com/LING71671/open-grokbot)의 코드와 라이선스를 유지하고 커뮤니티 앱을 추가했습니다. 원본 상용 Grok Bot의 유출 소스·자산·비공개 자격 증명은 포함하지 않습니다.

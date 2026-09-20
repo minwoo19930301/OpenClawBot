@@ -19,6 +19,7 @@ test("OpenClaw adapter uses documented OpenResponses shape and isolated server s
   assert.equal(body.max_output_tokens, 512);
   assert.deepEqual(body.tools, []);
   assert.equal(body.tool_choice, "none");
+  assert.ok(body.input.every((item) => item.type === "message"));
   const keyA = adapter.sessionKey({ userId: "user-a", roomId: "room-a", botId: "bot-1" });
   const keyB = adapter.sessionKey({ userId: "user-a", roomId: "room-b", botId: "bot-1" });
   const keyC = adapter.sessionKey({ userId: "user-b", roomId: "room-a", botId: "bot-1" });

@@ -8,6 +8,7 @@ const state = {
   selectedRoom: null,
   roomData: null,
   selectedBots: [],
+  botChoiceTouched: false,
   pollTimer: null,
   pollBusy: false,
   sending: false,
@@ -158,6 +159,7 @@ function showAuth() {
   state.rooms = [];
   state.bots = [];
   state.selectedBots = [];
+  state.botChoiceTouched = false;
   state.pendingSend = null;
   clearPendingAttachments();
   desktopUI?.reset();
@@ -202,6 +204,13 @@ async function loadRooms() {
     const data = await api("/api/rooms");
     state.rooms = data.rooms || [];
     state.bots = data.bots || [];
+    if (
+      state.session?.model?.configured &&
+      state.bots.length &&
+      !state.botChoiceTouched
+    ) {
+      state.selectedBots = [state.bots[0].id];
+    }
     els.usage.textContent = data.usage
       ? `오늘 ${data.usage.used} / ${data.usage.limit}회`
       : "";
@@ -481,6 +490,7 @@ function renderBotPicker() {
       state.selectedBots = $$(".bot-option input:checked", picker).map(
         (input) => input.value,
       );
+      state.botChoiceTouched = true;
       updateBotLabel();
     });
     const copy = document.createElement("span");
@@ -499,8 +509,8 @@ function updateBotLabel() {
     .map((id) => state.bots.find((bot) => bot.id === id)?.name)
     .filter(Boolean);
   $("#bot-picker-label").textContent = selected.length
-    ? selected.join(", ")
-    : "봇 없이 보내기";
+    ? `AI 답변 켜짐 · ${selected.join(", ")}`
+    : "AI 답변 꺼짐 · 사람끼리 대화";
 }
 function clearPendingAttachments() {
   state.attachmentGeneration += 1;

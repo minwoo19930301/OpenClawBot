@@ -1,5 +1,6 @@
 import dns from "node:dns/promises";
 import net from "node:net";
+import { readCdpVersion } from "./cdp.mjs";
 
 const MAX_TEXT = 8000;
 const MAX_SCREENSHOT = 2 * 1024 * 1024;
@@ -63,7 +64,7 @@ async function contextAddBypassServiceWorker(session, page) {
   try { const cdp = await session.context.newCDPSession(page); await cdp.send("Network.enable"); await cdp.send("Network.setBypassServiceWorker", { bypass: true }); session.cdpPages.add(page); session.cdpSessions.set(page, cdp); } catch {}
 }
 
-export function createBrowserTools({ desktops, playwright, fetchImpl = fetch } = {}) {
+export function createBrowserTools({ desktops, playwright, fetchImpl } = {}) {
   if (!(desktops instanceof Map)) throw new TypeError("desktops must be a Map");
   const sessions = new Map();
   const connecting = new Map();
@@ -83,9 +84,10 @@ export function createBrowserTools({ desktops, playwright, fetchImpl = fetch } =
     if (!pw.chromium?.connectOverCDP) throw new Error("playwright-core is unavailable");
     const target = browserEndpoint(endpoint);
     if (!target) throw fail(503, "Browser endpoint is unavailable");
-    const response = await fetchImpl(new URL("/json/version", target.base), { headers: target.headers, redirect: "error", signal: AbortSignal.timeout(3000) }).catch(() => null);
-    if (!response?.ok) throw fail(503, "Browser CDP endpoint is unavailable");
-    const info = await response.json().catch(() => null);
+    const info = fetchImpl
+      ? await fetchImpl(new URL("/json/version", target.base), { headers: target.headers, redirect: "error", signal: AbortSignal.timeout(3000) }).then(async (response) => response?.ok ? response.json() : null).catch(() => null)
+      : await readCdpVersion(new URL("/json/version", target.base)).catch(() => null);
+    if (!info) throw fail(503, "Browser CDP endpoint is unavailable");
     let ws;
     try { ws = new URL(info?.webSocketDebuggerUrl); } catch { throw fail(503, "Browser CDP endpoint is invalid"); }
     if (ws.username || ws.password || ws.search || ws.hash || !/^wss?:$/.test(ws.protocol) || !/^\/devtools\/browser\/[a-zA-Z0-9-]+$/.test(ws.pathname)) throw fail(503, "Browser CDP endpoint is invalid");

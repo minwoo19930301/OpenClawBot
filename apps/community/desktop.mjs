@@ -1,5 +1,6 @@
 import { randomBytes, createHash } from 'node:crypto';
 import WebSocket, { WebSocketServer } from 'ws';
+import { readCdpVersion } from './cdp.mjs';
 
 const hash = value => createHash('sha256').update(value).digest('hex');
 const fail = (status, message) => Object.assign(new Error(message), {status});
@@ -79,7 +80,7 @@ export function createDesktopHub({server, desktops, userFor, roomFor, originFor}
       const config=desktops.get(roomId);
       if(!config)return {configured:false,available:false,browserEnabled:false};
       let available=false;
-      try {const response=await fetch(new URL('/json/version',config.cdpUrl),{signal:AbortSignal.timeout(2000),redirect:'error',headers:{Host:'localhost'}});available=response.ok;await response.body?.cancel();} catch {}
+      try {await readCdpVersion(new URL('/json/version',config.cdpUrl),{timeoutMs:2000});available=true;} catch {}
       return {configured:true,available,browserEnabled:available};
     },
     close(){tickets.clear(); for(const {client,upstream}of connections){client.terminate();upstream.terminate();} connections.clear();wss.close();},

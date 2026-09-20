@@ -50,7 +50,7 @@ Docker/OCI 예시는 [deploy/README.md](deploy/README.md)에 있습니다. 공�
 npm test -w @open-grokbot/community
 ```
 
-현재 community 테스트는 34개이며 인증·권한·초대·첨부·데스크톱 티켓/프록시·모델 도구 루프와 기본 방 동작을 점검합니다. 로컬 테스트는 `build`가 필요한 runner와 community 작업을 함께 확인하며, 공개 URL의 운영 부하 검증은 별도 작업입니다.
+현재 community 테스트는 37개이며 인증·권한·초대·첨부·데스크톱 티켓/프록시·CDP 연결·모델 도구 루프와 기본 방 동작을 점검합니다. 로컬 테스트는 `build`가 필요한 runner와 community 작업을 함께 확인하며, 공개 URL의 운영 부하 검증은 별도 작업입니다.
 
 ## 라이선스와 attribution
 

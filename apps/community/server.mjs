@@ -18,6 +18,7 @@ import { createOpenClawFromEnv } from "./lib/backend/openclaw-http.mjs";
 import { parseDesktops, createDesktopHub } from "./desktop.mjs";
 import { createBrowserTools } from "./browser-tools.mjs";
 import { prepareMediaDir, cleanupOrphans, receiveAttachment, finalizeAttachment, MAX_DEFAULT } from "./media.mjs";
+import { createPushService, validateSubscription, validateEndpoint } from "./push.mjs";
 
 const scrypt = promisify(scryptCallback);
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -95,6 +96,8 @@ function initialize(db) {
     CREATE TABLE IF NOT EXISTS attachments(id TEXT PRIMARY KEY,room_id TEXT NOT NULL REFERENCES rooms(id),uploader_id TEXT NOT NULL REFERENCES users(id),name TEXT NOT NULL,mime TEXT NOT NULL,kind TEXT NOT NULL,size INTEGER NOT NULL,path TEXT NOT NULL,created_at INTEGER NOT NULL,bound_at INTEGER);
     CREATE INDEX IF NOT EXISTS room_attachments ON attachments(room_id,created_at);
     CREATE TABLE IF NOT EXISTS message_attachments(message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,attachment_id TEXT NOT NULL UNIQUE REFERENCES attachments(id),PRIMARY KEY(message_id,attachment_id));
+    CREATE TABLE IF NOT EXISTS push_subscriptions(endpoint TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),session_hash TEXT NOT NULL,room_id TEXT REFERENCES rooms(id),p256dh TEXT NOT NULL,auth TEXT NOT NULL,expiration_time INTEGER,created_at INTEGER NOT NULL);
+    CREATE INDEX IF NOT EXISTS push_user_session ON push_subscriptions(user_id,session_hash);
     CREATE TABLE IF NOT EXISTS media_usage(user_id TEXT NOT NULL,day TEXT NOT NULL,bytes INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(user_id,day));
     CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);`);
 }
@@ -150,6 +153,7 @@ export async function startCommunity(options = {}) {
         ? new ApiLlm(env)
         : null);
   const configured = Boolean(llm);
+  const push = createPushService({ db, env, sendImpl: options.pushSendImpl });
   const desktops = parseDesktops(env.COMMUNITY_DESKTOP_MAP);
   const browserTools = options.browserTools ?? createBrowserTools({ desktops });
   let desktopHub;
@@ -292,6 +296,7 @@ export async function startCommunity(options = {}) {
       nonce,
       Date.now(),
     );
+    void push.notifyRoom(roomId, kind, authorId).catch(() => {});
   }
   function insertMessageWithAttachments(roomId, author, content, authorId, nonce, attachmentIds) {
     const messageId = randomUUID();
@@ -457,6 +462,14 @@ export async function startCommunity(options = {}) {
         const files = {
           "/": ["index.html", "text/html"],
           "/app.js": ["app.js", "text/javascript"],
+          "/pwa.js": ["pwa.js", "text/javascript"],
+          "/sw.js": ["sw.js", "text/javascript"],
+          "/manifest.webmanifest": ["manifest.webmanifest", "application/manifest+json"],
+          "/icons/icon-192.svg": ["icons/icon-192.svg", "image/svg+xml"],
+          "/icons/icon-512.svg": ["icons/icon-512.svg", "image/svg+xml"],
+          "/icons/icon-192.png": ["icons/icon-192.png", "image/png"],
+          "/icons/icon-512.png": ["icons/icon-512.png", "image/png"],
+          "/icons/apple-touch-icon.png": ["icons/apple-touch-icon.png", "image/png"],
           "/styles.css": ["styles.css", "text/css"],
           "/desktop.js": ["desktop.js", "text/javascript"],
           "/desktop.css": ["desktop.css", "text/css"],
@@ -470,7 +483,7 @@ export async function startCommunity(options = {}) {
           join(options.publicDir ?? join(HERE, "public"), file[0]),
         );
         res.writeHead(200, {
-          "content-type": file[1] + "; charset=utf-8",
+          "content-type": file[1] + (file[1] === "image/png" ? "" : "; charset=utf-8"),
           "cache-control": "no-cache",
         });
         res.end(method === "HEAD" ? undefined : content);
@@ -492,7 +505,8 @@ export async function startCommunity(options = {}) {
       if (authenticating) limit("auth:" + req.socket.remoteAddress, 20);
       else limit("api:" + user.id, 180);
       const isAttachmentPost = method === "POST" && /^\/api\/rooms\/[a-f0-9-]{36}\/attachments$/.test(url.pathname);
-      const body = method === "POST" && !isAttachmentPost ? await readBody(req) : {};
+      const needsJsonBody = (method === "POST" && !isAttachmentPost) || (method === "DELETE" && url.pathname === "/api/push/subscriptions");
+      const body = needsJsonBody ? await readBody(req) : {};
       if (authenticating) {
         const username = text(body.username, 40, true).toLowerCase();
         if (
@@ -651,6 +665,7 @@ export async function startCommunity(options = {}) {
         return;
       }
       if (url.pathname === "/api/logout" && method === "POST") {
+        db.prepare("DELETE FROM push_subscriptions WHERE user_id=? AND session_hash=?").run(user.id, user.sessionHash);
         db.prepare("DELETE FROM sessions WHERE id_hash=?").run(
           user.sessionHash,
         );
@@ -660,6 +675,40 @@ export async function startCommunity(options = {}) {
           { ok: true },
           { "set-cookie": "community_session=; " + cookieFlags + " Max-Age=0" },
         );
+      }
+      if (url.pathname === "/api/push/config" && method === "GET")
+        return reply(res, 200, { configured: push.configured, publicKey: push.configured ? env.COMMUNITY_PUSH_PUBLIC_KEY : null });
+      if (url.pathname === "/api/push/subscriptions" && method === "POST") {
+        if (!push.configured) throw failure(503, "푸시 알림이 설정되지 않았습니다.");
+        limit("push-register:" + user.id, 20);
+        let subscription;
+        try { subscription = validateSubscription(body.subscription); } catch { throw failure(400, "올바른 푸시 구독 정보가 필요합니다."); }
+        db.prepare("DELETE FROM push_subscriptions WHERE session_hash NOT IN (SELECT id_hash FROM sessions WHERE expires_at>?) OR (expiration_time IS NOT NULL AND expiration_time<=?)").run(Date.now(), Date.now());
+        const existingDevice = db.prepare("SELECT 1 FROM push_subscriptions WHERE endpoint=?").get(subscription.endpoint);
+        if (!existingDevice && db.prepare("SELECT count(*) n FROM push_subscriptions WHERE user_id=?").get(user.id).n >= 10) throw failure(409, "알림 기기는 계정당 10개까지 등록할 수 있습니다.");
+        const roomId = body.roomId == null ? null : String(body.roomId);
+        if (roomId) roomFor(roomId, user);
+        const saved = db.prepare("INSERT INTO push_subscriptions(endpoint,user_id,session_hash,room_id,p256dh,auth,expiration_time,created_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(endpoint) DO UPDATE SET user_id=excluded.user_id,session_hash=excluded.session_hash,room_id=excluded.room_id,p256dh=excluded.p256dh,auth=excluded.auth,expiration_time=excluded.expiration_time WHERE push_subscriptions.user_id=excluded.user_id AND push_subscriptions.session_hash=excluded.session_hash").run(subscription.endpoint, user.id, user.sessionHash, roomId, subscription.p256dh, subscription.auth, subscription.expirationTime, Date.now());
+        if (saved.changes !== 1) throw failure(409, "푸시 기기가 이미 다른 계정에 연결되어 있습니다.");
+        return reply(res, 201, { ok: true });
+      }
+      if (url.pathname === "/api/push/subscriptions" && method === "DELETE") {
+        let endpoint;
+        try { endpoint = validateEndpoint(body.endpoint); } catch { throw failure(400, "올바른 푸시 기기 주소가 필요합니다."); }
+        db.prepare("DELETE FROM push_subscriptions WHERE endpoint=? AND user_id=? AND session_hash=?").run(endpoint, user.id, user.sessionHash);
+        return reply(res, 200, { ok: true });
+      }
+      if (url.pathname === "/api/push/test" && method === "POST") {
+        if (!push.configured) throw failure(503, "푸시 알림이 설정되지 않았습니다.");
+        let endpoint;
+        try { endpoint = validateEndpoint(body.endpoint); } catch { throw failure(400, "올바른 푸시 기기 주소가 필요합니다."); }
+        const row = db.prepare("SELECT * FROM push_subscriptions WHERE endpoint=? AND user_id=? AND session_hash=?").get(endpoint, user.id, user.sessionHash);
+        if (!row) throw failure(404, "푸시 기기를 찾을 수 없습니다.");
+        limit("push-test:" + user.id, 5);
+        let accepted;
+        try { accepted = await push.sendTest(row); } catch { throw failure(502, "푸시 알림을 전송하지 못했습니다."); }
+        if (!accepted) throw failure(410, "알림 구독이 만료되었습니다. 알림을 다시 켜주세요.");
+        return reply(res, 202, { accepted: true });
       }
       if (url.pathname === "/api/admin/invites" && method === "POST") {
         if (user.role !== "admin")
@@ -814,6 +863,7 @@ export async function startCommunity(options = {}) {
           reserve(user.id, Math.max(1, selected.length));
           insertMessageWithAttachments(room.id, user.displayName, content, user.id, scopedNonce, [...new Set(attachmentIds)]);
         });
+        void push.notifyRoom(room.id, "human", user.id).catch(() => {});
         if (selected.length) {
           roomJobs.add(room.id);
           const job = botRun(room, selected, user.id);
@@ -857,6 +907,7 @@ export async function startCommunity(options = {}) {
         for (const controller of controllers) controller.abort();
         desktopHub.close();
         await browserTools.close();
+        await push.close();
         const stopped = new Promise((done) => server.close(done));
         server.closeIdleConnections();
         await Promise.allSettled([...jobs]);

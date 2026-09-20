@@ -9,6 +9,8 @@
 - 모델/API key, bootstrap 초대, OpenClaw token, desktop endpoint는 server-only 환경 변수로 주입합니다. 저장소·브라우저 번들·로그에 넣지 마세요.
 - LLM이 연결되지 않은 상태에서는 사람 간 대화만 사용할 수 있습니다. 이미지 인식과 음성 전사는 제공하지 않습니다.
 - 방별 데스크톱은 수동 provision과 서버 측 map이 필요하며, 브라우저 도구는 제한된 action·provider-call quota 안에서만 실행됩니다.
+- Web Push는 VAPID 환경 변수가 모두 있을 때만 켜지며, subscription 등록·삭제는 인증과 CSRF 검사를 거칩니다. 발송 시점에 방 멤버십을 다시 확인하고 push 본문에는 private content를 넣지 않습니다.
+- VAPID private key와 subscription encryption keys는 server-only로 보관합니다. HTTPS secure context와 브라우저 권한이 필요하며, 실제 운영 전달 성공은 별도 검증 대상입니다.
 
 ## 제보 방법
 

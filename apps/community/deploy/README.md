@@ -19,6 +19,8 @@ From the repository root, build the app and desktop images before the first star
 
 `apps/community/deploy/.env.production` is a mode-0600 server-only file, excluded from Git and Docker build context. It holds the public origin, bootstrap invite and optional dedicated model configuration. `.env.openclaw` is a separate mode-0600 server-only credential store for the gateway token and provider key. Do not print these files or copy them into support logs. The model provider key is not required in the web app container.
 
+Optional Web Push uses `COMMUNITY_PUSH_SUBJECT`, `COMMUNITY_PUSH_PUBLIC_KEY`, and `COMMUNITY_PUSH_PRIVATE_KEY` in `.env.production`. Keep the VAPID private key server-only; never place it in the browser bundle, Compose file, logs, or a public issue. Leave all three empty to disable push. Subscription endpoints and encryption keys are stored in the application SQLite volume and are removed for the logging-out session or when the push service reports them expired.
+
 The first account created with the bootstrap invitation becomes the administrator and owns the initial shared room. Later accounts need single-use, 24-hour site invitations; room membership separately requires a room invitation. Passwords are individually salted/scrypt hashed, and session cookies are HttpOnly/Secure/SameSite=Strict.
 
 Before admitting users, install and enable the scoped desktop egress firewall, Docker forwarding drop-in, and bridge sysctl described in `desktop/README.md`; these host files are not installed by Compose. Chromium sandbox requirements and any narrow seccomp additions are documented there. Never use `--no-sandbox`, privileged containers, host filesystem mounts or the Docker socket in the shared desktop.
@@ -38,6 +40,8 @@ The optional local `scripts/setup-admin.mjs` helper reads the bootstrap invite t
 OpenClaw takes priority when `COMMUNITY_OPENCLAW_BASE_URL` and `COMMUNITY_OPENCLAW_TOKEN` are configured. Otherwise, all three direct-provider variables `COMMUNITY_LLM_BASE_URL`, `COMMUNITY_LLM_API_KEY`, `COMMUNITY_LLM_MODEL` are required. Without either backend, human chat and remote desktop work, and bot calls are explicitly disabled. Production never enables `COMMUNITY_DEMO`.
 
 When configured, selected bots can use the room's browser via bounded navigate/snapshot/click/type/key/scroll tools. Each bot turn has at most four browser actions and five provider calls. Additional calls count against the same per-user/global daily quotas (defaults 30/200). Web content is treated as untrusted. Private/metadata destinations are blocked in application checks and in host networking.
+
+PWA installation and Web Push require HTTPS and explicit browser permission. The repository documents the push contract and includes provider endpoint validation, but actual notification delivery through each browser/provider and production push reception still require a live deployment check.
 
 Gateway session keys are scoped to authenticated user, room, bot and a fresh turn nonce. The application supplies the room's bounded shared history. Gateway transcripts are confined to its dedicated volume. This is an invite-only shared application, not a general-purpose hostile multi-tenant code-execution service.
 

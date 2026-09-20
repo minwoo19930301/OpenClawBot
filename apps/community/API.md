@@ -45,6 +45,17 @@ OpenClaw가 설정되면 서버 전용 adapter가 별도 Gateway의 `/v1/respons
 
 모델 연결이 설정되지 않았거나 desktop mapping이 없는 방에서는 외부 도구를 실행했다고 주장하지 않습니다. 첨부 파일 내용 또한 모델에 제공되지 않습니다.
 
+## PWA와 Web Push
+
+Web Push는 VAPID 환경 변수 세 개가 모두 설정된 경우에만 활성화됩니다. VAPID private key는 서버 전용이며 API로 반환하지 않습니다.
+
+- `GET /api/push/config` → `{configured:boolean,publicKey:string|null}`. 공개 VAPID key만 반환합니다.
+- `POST /api/push/subscriptions` body `{subscription:{endpoint,keys:{p256dh,auth},expirationTime?},roomId?:string|null}` → `{ok:true}`. 인증·CSRF가 필요하며, `roomId`를 지정하면 현재 멤버인 방으로 제한됩니다.
+- `DELETE /api/push/subscriptions` body `{endpoint:string}` → `{ok:true}`. 현재 사용자와 현재 세션에 속한 해당 endpoint만 삭제합니다.
+- `POST /api/push/test` body `{endpoint:string}` → `{accepted:true}`. 현재 세션의 등록 endpoint에 일반 테스트 알림을 동기적으로 전송하고, provider가 성공 응답을 준 뒤 `202`를 반환합니다. 만료 endpoint는 `410`으로 정리합니다.
+
+발송 본문에는 방 메시지·첨부·사용자명 같은 private content를 넣지 않습니다. 서버는 발송 시점의 방 멤버십을 다시 확인하고, 만료된 push endpoint를 정리합니다. 로그아웃은 해당 세션의 구독을 삭제합니다. 서비스 워커와 브라우저 권한은 HTTPS secure context가 필요하며, 실제 운영 브라우저에서 푸시가 도착하는지는 아직 검증하지 않았습니다.
+
 ## 클라이언트 동작
 
 웹 클라이언트는 인증된 동안 선택한 방을 3초마다 조회하고, 메시지와 첨부 metadata를 DOM API와 `textContent`로 렌더링합니다. bot picker와 paperclip/record controls는 별도이며, room 변경·logout 때 pending upload, recorder, desktop ticket/socket을 폐기합니다.

@@ -4,7 +4,12 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#070707" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <meta name="description" content="초대 기반 공동 봇 대화" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icons/icon-192.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <title>Open Grokbot</title>
     <link rel="stylesheet" href="/styles.css" />
     <link rel="stylesheet" href="/desktop.css" />
@@ -149,6 +154,7 @@
             role="status"
             aria-live="polite"
           ></p>
+          <button id="auth-install-button" class="outline-button auth-install-button is-hidden" type="button">홈 화면에 추가</button>
         </div>
       </section>
       <section id="workspace-view" class="workspace-view is-hidden">
@@ -200,6 +206,11 @@
               <svg class="icon" aria-hidden="true"><use href="#i-invite" /></svg
               >사용자 초대
             </button>
+            <div class="pwa-tools" aria-label="앱 및 알림 설정">
+              <button id="install-button" class="sidebar-command is-hidden" type="button">앱으로 설치</button>
+              <button id="push-button" class="sidebar-command is-hidden" type="button">알림 켜기</button>
+              <button id="test-push-button" class="sidebar-command is-hidden" type="button">테스트 알림 보내기</button>
+            </div>
             <div class="profile-row">
               <div id="profile-avatar" class="avatar">?</div>
               <div class="profile-copy">
@@ -465,6 +476,16 @@
         <div class="modal-actions">
           <button class="primary-button modal-close" type="button">닫기</button>
         </div>
+      </form>
+    </dialog>
+    <dialog id="pwa-dialog" class="modal">
+      <form method="dialog">
+        <div class="modal-head">
+          <h2 id="pwa-dialog-title">앱 설치 및 알림</h2>
+          <button class="icon-button modal-close" type="submit" aria-label="닫기">×</button>
+        </div>
+        <p id="pwa-dialog-message" class="modal-copy"></p>
+        <div class="modal-actions"><button class="primary-button" type="submit">확인</button></div>
       </form>
     </dialog>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>

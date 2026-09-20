@@ -393,6 +393,14 @@ button {
   font-size: 11px;
   margin-right: 10px;
 }
+.pwa-tools {
+  display: grid;
+  gap: 2px;
+}
+.auth-install-button {
+  width: 100%;
+  margin-top: 12px;
+}
 .model-status {
   color: #8fc7a8;
   font-size: 11px;

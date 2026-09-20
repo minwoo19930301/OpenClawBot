@@ -1,4 +1,5 @@
 import { createDesktopUI } from "/desktop.js";
+import { createPwaController } from "/pwa.js";
 
 const state = {
   session: null,
@@ -19,6 +20,7 @@ const state = {
   attachmentGeneration: 0,
 };
 let desktopUI;
+let pwaUI;
 const $ = (s, root = document) => root.querySelector(s);
 const $$ = (s, root = document) => [...root.querySelectorAll(s)];
 const els = {
@@ -147,6 +149,7 @@ async function loadSession() {
 }
 function showAuth() {
   cancelActiveRecording();
+  pwaUI?.setSession(null);
   els.auth.classList.remove("is-hidden");
   els.workspace.classList.add("is-hidden");
   stopPolling();
@@ -190,7 +193,8 @@ async function enterWorkspace() {
     ? model.backend === "openclaw"
       ? "OpenClaw 연결됨"
       : "AI 연결됨"
-    : "";
+      : "";
+  pwaUI?.setSession(state.session);
   await loadRooms();
 }
 async function loadRooms() {
@@ -214,8 +218,13 @@ async function loadRooms() {
           "community-room:" + state.session.user.id,
         );
       } catch {}
+      const requested = new URLSearchParams(window.location.search).get("room");
       await selectRoom(
-        state.rooms.some((room) => room.id === last) ? last : state.rooms[0].id,
+        state.rooms.some((room) => room.id === requested)
+          ? requested
+          : state.rooms.some((room) => room.id === last)
+            ? last
+            : state.rooms[0].id,
       );
     }
   } catch (error) {
@@ -867,7 +876,9 @@ function bind() {
   );
   $("#logout-button").addEventListener("click", async () => {
     try {
+      await pwaUI?.clearSession({ keepSession: true });
       await api("/api/logout", { method: "POST", body: "{}" });
+      await pwaUI?.clearSession();
       state.session = null;
       showAuth();
     } catch (error) {
@@ -953,5 +964,6 @@ function bind() {
   );
 }
 bind();
+pwaUI = createPwaController({ api, getSession: () => state.session, toast });
 desktopUI = createDesktopUI({ api, getRoomId: () => state.selectedRoom, toast });
 loadSession();

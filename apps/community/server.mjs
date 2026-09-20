@@ -498,12 +498,12 @@ export async function startCommunity(options = {}) {
         if (
           !/^[a-z0-9_]{3,40}$/.test(username) ||
           typeof body.password !== "string" ||
-          body.password.length < 12 ||
+          body.password.length < 10 ||
           body.password.length > 256
         )
           throw failure(
             400,
-            "아이디는 영문·숫자·밑줄 3~40자, 비밀번호는 12~256자로 입력해 주세요.",
+            "아이디는 영문·숫자·밑줄 3~40자, 비밀번호는 10~256자로 입력해 주세요.",
           );
         if (url.pathname === "/api/login") {
           const row = db

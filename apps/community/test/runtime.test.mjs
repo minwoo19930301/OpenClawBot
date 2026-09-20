@@ -116,6 +116,9 @@ test("selected bots receive one bounded call each with shared room context", asy
   assert.equal(calls.length, 2);
   assert.ok(calls.every((call) => call.user.includes("ROOM_A_ONLY")));
   assert.ok(calls.every((call) => call.user.includes("prior human context")));
+  // The adapters own the runner envelope; the model should only see real tools.
+  assert.ok(calls.every((call) => !call.system.includes("SendMessage")));
+  assert.ok(calls.every((call) => call.system.includes("일반 텍스트")));
 });
 
 test("room context and bot output stay isolated between rooms", async (t) => {

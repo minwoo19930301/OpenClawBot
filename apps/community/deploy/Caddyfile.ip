@@ -1,0 +1,24 @@
+{
+    admin off
+    default_sni 168.107.91.96
+    servers {
+        protocols h1 h2
+    }
+}
+https://168.107.91.96 {
+    tls {
+        issuer acme {
+            dir https://acme-v02.api.letsencrypt.org/directory
+            profile shortlived
+        }
+    }
+    encode zstd gzip
+    request_body {
+        max_size 13MB
+    }
+    reverse_proxy app:8787
+    header {
+        X-Content-Type-Options nosniff
+        Referrer-Policy no-referrer
+    }
+}

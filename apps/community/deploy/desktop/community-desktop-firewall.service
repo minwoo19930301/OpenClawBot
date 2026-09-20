@@ -1,0 +1,13 @@
+[Unit]
+Description=Restrict community desktop container egress
+Requires=docker.service
+After=docker.service firewalld.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/community-desktop-guard
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

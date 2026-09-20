@@ -1,0 +1,11 @@
+import {build} from 'esbuild';
+import {mkdir,readFile,writeFile} from 'node:fs/promises';
+import {dirname,join} from 'node:path';
+import {createRequire} from 'node:module';
+const require=createRequire(import.meta.url);
+await mkdir(new URL('./public/vendor',import.meta.url),{recursive:true});
+await build({entryPoints:[require.resolve('@novnc/novnc')],outfile:new URL('./public/vendor/novnc.js',import.meta.url).pathname,bundle:true,format:'esm',platform:'browser',target:['es2022'],minify:true,legalComments:'inline',banner:{js:'/*! noVNC 1.7.0 | Copyright the noVNC authors | MPL-2.0 | Source: https://github.com/novnc/noVNC/tree/v1.7.0 | License notices: /vendor/novnc-LICENSE.txt */'}});
+const novncRoot=join(dirname(require.resolve('@novnc/novnc')),'..');
+const notices=['noVNC 1.7.0 source: https://github.com/novnc/noVNC/tree/v1.7.0\nThe noVNC source is unmodified; esbuild bundles/minifies it for this application.'];
+for(const name of ['LICENSE.txt','AUTHORS','docs/LICENSE.MPL-2.0','docs/LICENSE.BSD-2-Clause','docs/LICENSE.BSD-3-Clause','vendor/pako/LICENSE']) notices.push(name+'\n'+await readFile(join(novncRoot,name),'utf8'));
+await writeFile(new URL('./public/vendor/novnc-LICENSE.txt',import.meta.url),notices.join('\n\n'));

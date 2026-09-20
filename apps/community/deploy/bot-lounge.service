@@ -1,0 +1,36 @@
+[Unit]
+Description=Bot Lounge community web app
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bot-lounge
+Group=bot-lounge
+WorkingDirectory=/opt/bot-lounge
+EnvironmentFile=/etc/bot-lounge.env
+Environment=NODE_ENV=production
+Environment=COMMUNITY_HOST=127.0.0.1
+Environment=COMMUNITY_PORT=8787
+Environment=COMMUNITY_DATA_DIR=/var/lib/bot-lounge
+ExecStart=/usr/bin/node /opt/bot-lounge/apps/community/server.mjs
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=35
+StateDirectory=bot-lounge
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryMax=768M
+TasksMax=128
+
+[Install]
+WantedBy=multi-user.target

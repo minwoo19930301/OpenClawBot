@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#070707" />
+    <meta name="description" content="초대 기반 공동 봇 대화" />
+    <title>Open Grokbot</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/desktop.css" />
+  </head>
+  <body>
+    <svg
+      class="icon-definitions"
+      aria-hidden="true"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <symbol id="i-plus" viewBox="0 0 24 24">
+        <path d="M12 5v14M5 12h14" />
+      </symbol>
+      <symbol id="i-search" viewBox="0 0 24 24">
+        <circle cx="10.5" cy="10.5" r="6.5" />
+        <path d="m16 16 4 4" />
+      </symbol>
+      <symbol id="i-people" viewBox="0 0 24 24">
+        <circle cx="9" cy="8" r="3" />
+        <path
+          d="M3 20v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 4v2"
+        />
+      </symbol>
+      <symbol id="i-invite" viewBox="0 0 24 24">
+        <circle cx="9" cy="8" r="3" />
+        <path d="M3 20v-2a6 6 0 0 1 12 0v2M19 8v6M16 11h6" />
+      </symbol>
+      <symbol id="i-arrow" viewBox="0 0 24 24">
+        <path d="M12 19V5m-6 6 6-6 6 6" />
+      </symbol>
+      <symbol id="i-close" viewBox="0 0 24 24">
+        <path d="m6 6 12 12M6 18 18 6" />
+      </symbol>
+      <symbol id="i-menu" viewBox="0 0 24 24">
+        <rect x="3" y="4" width="18" height="16" rx="3" />
+        <path d="M9 4v16" />
+      </symbol>
+      <symbol id="i-join" viewBox="0 0 24 24">
+        <path
+          d="M14 4h5a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-5M3 12h12m-4-4 4 4-4 4"
+        />
+      </symbol>
+      <symbol id="i-bot" viewBox="0 0 24 24">
+        <rect x="4" y="7" width="16" height="13" rx="5" />
+        <path d="M12 3v4M8 12v3M16 12v3" />
+      </symbol>
+      <symbol id="i-attach" viewBox="0 0 24 24">
+        <path d="m20 11-8.5 8.5a5 5 0 0 1-7-7L13 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L14 7" />
+      </symbol>
+      <symbol id="i-mic" viewBox="0 0 24 24">
+        <rect x="8" y="3" width="8" height="12" rx="4" />
+        <path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6" />
+      </symbol>
+    </svg>
+    <div id="app">
+      <section id="auth-view" class="auth-view" aria-labelledby="auth-title">
+        <div class="auth-panel">
+          <h1 id="auth-title">Open Grokbot</h1>
+          <p class="auth-description">초대받은 계정으로 로그인하세요.</p>
+          <div class="auth-tabs" role="tablist" aria-label="인증 방식">
+            <button
+              class="tab-button is-active"
+              type="button"
+              data-auth-tab="login"
+              role="tab"
+              aria-selected="true"
+            >
+              로그인
+            </button>
+            <button
+              class="tab-button"
+              type="button"
+              data-auth-tab="register"
+              role="tab"
+              aria-selected="false"
+            >
+              초대 가입
+            </button>
+          </div>
+          <form id="login-form" class="auth-form">
+            <label for="login-username">사용자 이름</label
+            ><input
+              id="login-username"
+              name="username"
+              autocomplete="username"
+              required
+              maxlength="40"
+            />
+            <label for="login-password">비밀번호</label
+            ><input
+              id="login-password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              required
+              minlength="12"
+            />
+            <button class="primary-button full" type="submit">로그인</button>
+          </form>
+          <form id="register-form" class="auth-form is-hidden">
+            <label for="register-display">표시 이름</label
+            ><input
+              id="register-display"
+              name="displayName"
+              autocomplete="name"
+              required
+              maxlength="60"
+            />
+            <label for="register-username">사용자 이름</label
+            ><input
+              id="register-username"
+              name="username"
+              autocomplete="username"
+              required
+              maxlength="40"
+              placeholder="영문, 숫자, 밑줄 3자 이상"
+            />
+            <label for="register-password"
+              >비밀번호 <span class="hint">12자 이상</span></label
+            ><input
+              id="register-password"
+              name="password"
+              type="password"
+              autocomplete="new-password"
+              required
+              minlength="12"
+            />
+            <label for="register-token">가입 초대 코드</label
+            ><input
+              id="register-token"
+              name="inviteToken"
+              autocomplete="off"
+              required
+            />
+            <button class="primary-button full" type="submit">
+              계정 만들기
+            </button>
+          </form>
+          <p
+            id="auth-message"
+            class="form-message"
+            role="status"
+            aria-live="polite"
+          ></p>
+        </div>
+      </section>
+      <section id="workspace-view" class="workspace-view is-hidden">
+        <aside id="sidebar" class="sidebar" aria-label="대화 목록">
+          <div class="sidebar-top">
+            <span class="app-name">Open Grokbot</span>
+            <div class="sidebar-actions">
+              <button
+                id="create-room-button"
+                class="icon-button"
+                type="button"
+                aria-label="새 대화"
+                title="새 대화"
+              >
+                <svg class="icon"><use href="#i-plus" /></svg>
+              </button>
+              <button
+                id="mobile-close"
+                class="icon-button mobile-only"
+                type="button"
+                aria-label="메뉴 닫기"
+              >
+                <svg class="icon"><use href="#i-close" /></svg>
+              </button>
+            </div>
+          </div>
+          <label class="search-field"
+            ><svg class="icon" aria-hidden="true"><use href="#i-search" /></svg
+            ><input
+              id="room-search"
+              type="search"
+              placeholder="검색"
+              aria-label="대화 검색"
+              autocomplete="off"
+            /><kbd>/</kbd></label
+          >
+          <div class="sidebar-heading">대화</div>
+          <nav id="room-list" class="room-list" aria-label="내 대화 목록"></nav>
+          <div class="sidebar-bottom">
+            <button id="join-room-button" class="sidebar-command" type="button">
+              <svg class="icon" aria-hidden="true"><use href="#i-join" /></svg
+              >초대 코드로 참여
+            </button>
+            <button
+              id="site-invite-button"
+              class="sidebar-command is-hidden"
+              type="button"
+            >
+              <svg class="icon" aria-hidden="true"><use href="#i-invite" /></svg
+              >사용자 초대
+            </button>
+            <div class="profile-row">
+              <div id="profile-avatar" class="avatar">?</div>
+              <div class="profile-copy">
+                <strong id="profile-name">사용자</strong
+                ><span id="profile-role"></span>
+              </div>
+              <button id="logout-button" class="text-button" type="button">
+                로그아웃
+              </button>
+            </div>
+          </div>
+        </aside>
+        <div id="sidebar-scrim" class="sidebar-scrim"></div>
+        <main class="main-panel">
+          <header class="topbar">
+            <button
+              id="mobile-menu"
+              class="icon-button mobile-only"
+              type="button"
+              aria-label="메뉴 열기"
+            >
+              <svg class="icon"><use href="#i-menu" /></svg>
+            </button>
+            <div class="header-identity">
+              <span class="header-avatar"
+                ><svg class="icon" aria-hidden="true">
+                  <use href="#i-people" /></svg
+              ></span>
+              <h1 id="room-title">대화</h1>
+            </div>
+            <span id="mobile-room-title" class="sr-only"></span
+            ><span id="room-kicker" class="sr-only"></span>
+            <div class="topbar-actions">
+              <span
+                id="demo-badge"
+                class="demo-badge is-hidden"
+                title="실제 AI가 연결되지 않은 기능 미리보기"
+                >데모 · 실제 AI 미연결</span
+              ><span id="model-status" class="model-status is-hidden" role="status"></span
+              ><button
+                id="members-toggle"
+                class="icon-button members-button"
+                type="button"
+                aria-label="참여자 보기"
+                title="참여자"
+              >
+                <svg class="icon" aria-hidden="true">
+                  <use href="#i-people" /></svg
+                ><span id="member-count">0</span></button
+              ><button
+                id="room-invite-button"
+                class="icon-button is-hidden"
+                type="button"
+                aria-label="대화에 초대"
+                title="대화에 초대"
+              >
+                <svg class="icon"><use href="#i-invite" /></svg>
+              </button>
+            </div>
+          </header>
+          <section id="empty-state" class="empty-state">
+            <h2>새 대화</h2>
+            <p>대화를 만들거나 초대 코드로 참여하세요.</p>
+            <button
+              id="empty-create-button"
+              class="outline-button"
+              type="button"
+            >
+              대화 만들기
+            </button>
+          </section>
+          <section
+            id="room-view"
+            class="room-view is-hidden"
+            aria-labelledby="room-title"
+          >
+            <div
+              id="model-warning"
+              class="model-warning is-hidden"
+              role="status"
+            >
+              AI 모델이 연결되지 않았습니다. 메시지는 참여자들과 공유됩니다.
+            </div>
+            <div
+              id="message-list"
+              class="message-list"
+              aria-live="polite"
+              aria-label="대화 내용"
+            ></div>
+            <div class="composer-dock">
+              <div
+                id="sending-status"
+                class="sending-status"
+                role="status"
+                aria-live="polite"
+              ></div>
+              <form id="composer-form" class="composer">
+                <div
+                  id="bot-picker"
+                  class="bot-picker is-hidden"
+                  role="group"
+                  aria-label="응답할 봇 선택"
+                ></div>
+                <div class="composer-row">
+                  <button
+                    id="bot-picker-button"
+                    class="bot-picker-button"
+                    type="button"
+                    aria-label="응답할 봇 선택"
+                    title="응답할 봇 선택"
+                    aria-expanded="false"
+                    aria-controls="bot-picker"
+                  >
+                    <svg class="icon"><use href="#i-plus" /></svg></button
+                  ><label class="sr-only" for="message-input">메시지 입력</label
+                  ><button
+                    id="attach-button"
+                    class="bot-picker-button attach-button"
+                    type="button"
+                    aria-label="사진 또는 음성 첨부"
+                    title="사진 또는 음성 첨부"
+                  >
+                    <svg class="icon"><use href="#i-attach" /></svg>
+                  </button><input id="attachment-input" class="sr-only" type="file" accept="image/*,audio/*" multiple /><textarea
+                    id="message-input"
+                    rows="1"
+                    maxlength="4000"
+                    placeholder="메시지 보내기"
+                  ></textarea
+                  ><button
+                    id="record-button"
+                    class="bot-picker-button record-button"
+                    type="button"
+                    aria-label="음성 녹음 시작"
+                    title="음성 녹음"
+                  >
+                    <svg class="icon"><use href="#i-mic" /></svg>
+                  </button
+                  ><button id="record-cancel-button" class="record-cancel-button" type="button" hidden>취소</button
+                  ><button
+                    id="send-button"
+                    class="send-button"
+                    type="submit"
+                    aria-label="메시지 보내기"
+                  >
+                    <svg class="icon"><use href="#i-arrow" /></svg>
+                  </button>
+                </div>
+                <div id="attachment-list" class="attachment-list" aria-live="polite"></div>
+              </form>
+              <div class="composer-caption">
+                <span id="bot-picker-label">봇 없이 보내기</span
+                ><span id="usage-label"></span>
+              </div>
+            </div>
+          </section>
+        </main>
+        <aside id="member-panel" class="member-panel" aria-label="대화 참여자">
+          <div class="member-panel-head">
+            <h2>참여자</h2>
+            <button
+              id="member-close"
+              class="icon-button"
+              type="button"
+              aria-label="참여자 패널 닫기"
+            >
+              <svg class="icon"><use href="#i-close" /></svg>
+            </button>
+          </div>
+          <p id="room-description" class="room-description"></p>
+          <div id="member-list" class="member-list"></div>
+        </aside>
+      </section>
+    </div>
+    <dialog id="room-dialog" class="modal">
+      <form id="room-form">
+        <div class="modal-head">
+          <h2>새 대화</h2>
+          <button
+            class="icon-button modal-close"
+            type="button"
+            aria-label="닫기"
+          >
+            <svg class="icon"><use href="#i-close" /></svg>
+          </button>
+        </div>
+        <label for="room-name">이름</label
+        ><input
+          id="room-name"
+          name="name"
+          required
+          maxlength="80"
+          autocomplete="off"
+        /><label for="room-description-input"
+          >설명 <span class="hint">선택</span></label
+        ><textarea
+          id="room-description-input"
+          name="description"
+          maxlength="240"
+          rows="3"
+        ></textarea>
+        <p id="room-form-message" class="form-message" role="status"></p>
+        <div class="modal-actions">
+          <button class="outline-button modal-cancel" type="button">취소</button
+          ><button class="primary-button" type="submit">만들기</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="image-dialog" class="image-dialog">
+      <button id="image-dialog-close" class="icon-button" type="button" aria-label="이미지 닫기">
+        <svg class="icon"><use href="#i-close" /></svg>
+      </button>
+      <img id="image-dialog-image" alt="첨부 이미지" />
+    </dialog>
+    <dialog id="join-dialog" class="modal">
+      <form id="join-form">
+        <div class="modal-head">
+          <h2>대화에 참여</h2>
+          <button
+            class="icon-button modal-close"
+            type="button"
+            aria-label="닫기"
+          >
+            <svg class="icon"><use href="#i-close" /></svg>
+          </button>
+        </div>
+        <label for="join-token">대화 초대 코드</label
+        ><input
+          id="join-token"
+          name="token"
+          required
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <p id="join-form-message" class="form-message" role="status"></p>
+        <div class="modal-actions">
+          <button class="outline-button modal-cancel" type="button">취소</button
+          ><button class="primary-button" type="submit">참여하기</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="invite-dialog" class="modal invite-modal">
+      <form method="dialog">
+        <div class="modal-head">
+          <h2>초대 코드</h2>
+          <button
+            class="icon-button modal-close"
+            type="button"
+            aria-label="닫기"
+          >
+            <svg class="icon"><use href="#i-close" /></svg>
+          </button>
+        </div>
+        <p class="eyebrow sr-only"></p>
+        <p class="modal-copy">24시간 안에 한 번 사용할 수 있습니다.</p>
+        <div class="token-box">
+          <code id="invite-token"></code
+          ><button id="copy-invite" class="outline-button" type="button">
+            복사
+          </button>
+        </div>
+        <p id="invite-expires" class="expires-label"></p>
+        <div class="modal-actions">
+          <button class="primary-button modal-close" type="button">닫기</button>
+        </div>
+      </form>
+    </dialog>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

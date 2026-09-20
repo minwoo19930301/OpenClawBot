@@ -4,3 +4,12 @@ dist/
 .DS_Store
 *.log
 .reasonix/
+.env
+.env.*
+!.env.example
+.community-data/
+.community-preview/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+apps/community/public/vendor/

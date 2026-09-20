@@ -1,0 +1,20 @@
+.desktop-button[aria-expanded="true"] { background: var(--selected); color: var(--text); }
+.desktop-icon { display: block; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.desktop-panel { position: fixed; z-index: 7; top: 51px; right: 0; width: min(380px, 94vw); padding: 12px; background: var(--sidebar); border: 1px solid var(--line); border-top: 0; box-shadow: -10px 12px 30px #0007; }
+.desktop-head { display: flex; align-items: center; justify-content: space-between; min-height: 30px; }
+.desktop-status { min-height: 18px; margin: 4px 4px 8px; color: var(--dim); font-size: 11px; }
+.desktop-status[data-kind="error"] { color: #e9a2a2; }
+.desktop-status[data-kind="ready"] { color: #bcbcbc; }
+.desktop-preview, .desktop-dialog-view { display: grid; place-items: center; min-height: 190px; border: 1px solid var(--line); border-radius: 8px; background: #070707; color: var(--dim); overflow: hidden; }
+.desktop-preview { cursor: pointer; height: 218px; }
+.desktop-preview:focus-visible { outline: 1px solid #999; outline-offset: 3px; }
+.desktop-preview canvas, .desktop-dialog-view canvas { display: block; width: 100%; height: 100%; object-fit: contain; }
+.desktop-controls { display: flex; justify-content: flex-end; gap: 6px; padding-top: 8px; }
+.desktop-control { min-height: 28px; padding: 5px 9px; font-size: 11px; }
+.desktop-dialog { width: min(1100px, 94vw); height: min(760px, 90vh); padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: #111; color: var(--text); }
+.desktop-dialog::backdrop { background: #000b; }
+.desktop-dialog-view { height: calc(100% - 34px); min-height: 0; margin-top: 4px; }
+
+.desktop-preview { position: relative; }
+.desktop-preview-open { position:absolute; inset:0; width:100%; height:100%; border:0; background:transparent; cursor:zoom-in; z-index:2; }
+.desktop-dialog:fullscreen { width:100vw; height:100vh; max-width:none; max-height:none; border-radius:0; box-sizing:border-box; }

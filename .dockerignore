@@ -1,0 +1,12 @@
+.git
+node_modules
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+**/.env
+**/.env.*
+!**/.env.example
+.community-preview
+.community-data
+**/*.sqlite*
+**/*.log

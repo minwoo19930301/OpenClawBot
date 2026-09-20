@@ -1,0 +1,20 @@
+{
+  "name": "@open-grokbot/community",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test test/*.test.mjs",
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "@novnc/novnc": "1.7.0",
+    "@open-grokbot/llm": "0.1.0",
+    "@open-grokbot/runner": "0.1.0",
+    "busboy": "1.6.0",
+    "playwright-core": "1.63.0",
+    "ws": "8.21.3"
+  }
+}

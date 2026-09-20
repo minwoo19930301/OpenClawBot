@@ -1,0 +1,30 @@
+services:
+  desktop:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    init: true
+    environment:
+      DESKTOP_START_URL: ${DESKTOP_START_URL:-about:blank}
+      DESKTOP_SCREEN: ${DESKTOP_SCREEN:-1280x800x24}
+    ports:
+      - "127.0.0.1:6080:6080" # app websocket proxy reaches this loopback port
+      - "127.0.0.1:9222:9222" # app backend only; never bind WAN
+    mem_limit: 2g
+    cpus: 1.0
+    pids_limit: 256
+    shm_size: 128m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - private
+
+networks:
+  private:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.50.0/28

@@ -1,4 +1,17 @@
-# Open-Grokbot
+# Open-Grokbot community app
+
+이 fork에는 [Open-Grokbot upstream](https://github.com/LING71671/open-grokbot)의 GPL-3.0-only clean-room 프레임워크를 바탕으로 구현한 초대 기반 사용자 커뮤니티 웹앱이 추가되어 있습니다. 원본 프레임워크의 구조·런타임·프로토콜 문서는 아래에 유지하며, 이번 커뮤니티 앱의 코드는 계정 인증, 방별 ACL, 첨부파일, Docker/OCI 배포, 브라우저 데스크톱 프록시, OpenClaw adapter에 집중합니다.
+
+- 앱 안내와 실행: [apps/community/README.md](apps/community/README.md)
+- 라이브 링크: [https://168.107.91.96](https://168.107.91.96)
+- 포트폴리오 요약: [docs/portfolio-ko.md](docs/portfolio-ko.md)
+- 보안 범위와 제보: [SECURITY.md](SECURITY.md)
+
+모델 provider/API key는 저장소에 포함하지 않으며 서버 환경 변수로만 주입합니다. 아직 외부 LLM 비용을 발생시키지 않는 배포는 모델 환경 변수를 비워 사람 간 대화만 허용할 수 있습니다. OpenClaw 2.0 계열 gateway 연결은 별도 환경 변수로 활성화하는 adapter이며, 최종 운영 검증 전에는 실서비스 동작을 보장하지 않습니다. 이미지 인식과 음성 전사는 구현하지 않았고, 방별 데스크톱은 운영자가 별도로 provision해야 합니다.
+
+원본 상용 Grok Bot의 유출 소스·자산·비공개 자격 증명은 포함하지 않습니다. 공개 upstream 프레임워크의 코드와 GPL 라이선스는 유지하며, 출처와 추가 구현 범위는 [LICENSE](LICENSE)와 [apps/community/README.md](apps/community/README.md)에 명시합니다.
+
+## Upstream framework
 
 [简体中文](README.zh.md)
 
@@ -192,7 +205,7 @@ no changes inside packages/*.
 npm test
 ```
 
-Covers: lane priority, exclusivity, watchdog escape + drain, port protocol breaches, SSE reconnect + idempotent sendPrompt retry, transcript persistence, ledger dedupe/digest-mismatch/restart survival, A2A wake + priority interrupt, group convergence/caps, broadcast, subagent lifecycle, coordinator dual carriers, cross-user relay budget/backoff/idempotency, cloud-agent lifecycle, local-exec heartbeat/timeout, BCS conflicts/locks, LLM provider wire formats, e2e (user→agent, A2A wake→reply, group chat). 84 tests across 8 packages.
+Covers: lane priority, exclusivity, watchdog escape + drain, port protocol breaches, SSE reconnect + idempotent sendPrompt retry, transcript persistence, ledger dedupe/digest-mismatch/restart survival, A2A wake + priority interrupt, group convergence/caps, broadcast, subagent lifecycle, coordinator dual carriers, cross-user relay budget/backoff/idempotency, cloud-agent lifecycle, local-exec heartbeat/timeout, BCS conflicts/locks, LLM provider wire formats, e2e (user→agent, A2A wake→reply, group chat). Run `npm test` for all workspace suites; the community app suite currently has 34 tests.
 
 ## Roadmap
 

@@ -2,7 +2,7 @@
 
 이 앱은 [Open-Grokbot upstream](https://github.com/LING71671/open-grokbot)의 GPL-3.0-only clean-room 프레임워크를 바탕으로 별도 구현한 사용자 커뮤니티 표면입니다. upstream의 구조·런타임·프로토콜 문서는 저장소에 유지하며, 이 앱에서 추가한 계정 인증, 방별 ACL, 첨부파일, Docker/OCI 배포, 브라우저 데스크톱 프록시와 OpenClaw adapter의 범위를 설명합니다. 원본 제품과의 제휴를 주장하지 않으며 원본 소스·자산·비공개 자격 증명을 포함하지 않습니다.
 
-라이브 링크: [https://168.107.91.96](https://168.107.91.96) (운영 상태는 별도 검증이 필요합니다.)
+라이브 링크: [https://168.107.91.96](https://168.107.91.96) · 초대 계정 필요
 
 초대 기반 계정과 방별 권한을 제공하는 공동 대화 웹앱입니다. SQLite에 계정·세션·방·메시지·첨부 메타데이터를 저장하고, 사람 메시지와 선택한 봇의 응답을 같은 방에 표시합니다. UI는 공개적으로 재구성된 Grok Bot 0.18 화면의 어두운 구조와 색상을 참고하며, 차이와 근거는 [DESIGN-REFERENCE.md](DESIGN-REFERENCE.md)에 기록합니다.
 
@@ -36,7 +36,7 @@ npm start -w @open-grokbot/community
 
 `COMMUNITY_DESKTOP_MAP`은 방 UUID마다 전용 OCI 데스크톱 WebSocket 및 CDP endpoint를 매핑합니다. endpoint는 서버가 허용한 loopback 또는 전용 desktop 컨테이너 주소여야 하며, 한 endpoint를 여러 방이 공유할 수 없습니다. 클라이언트는 먼저 `GET /api/rooms/:id/desktop`으로 상태를 조회하고, 사용자가 연결을 요청할 때 `POST .../desktop/ticket`으로 짧은 수명의 티켓을 받은 뒤 same-origin WebSocket으로 연결합니다.
 
-설정된 방의 봇 실행에는 OpenAI 호환 Chat Completions 모델 호출과 브라우저 도구 호출이 포함될 수 있습니다. 한 턴은 최대 4개 브라우저 action과 최대 5회의 모델 호출로 제한되며, 추가 모델 호출 전에 서버 quota callback을 통과해야 합니다. 설정되지 않은 방은 브라우저 도구를 사용하지 않습니다. OpenClaw 2.0 계열 gateway는 `COMMUNITY_OPENCLAW_BASE_URL`, `COMMUNITY_OPENCLAW_TOKEN`, 선택적 agent id를 서버 환경 변수로 명시했을 때만 adapter를 통해 연결됩니다. 현재 연결 작업이 진행 중이므로 최종 운영 검증 전에는 실서비스 동작을 보장하지 않습니다.
+설정된 방의 봇 실행에는 모델 호출과 브라우저 도구 호출이 포함될 수 있습니다. 한 턴은 최대 4개 브라우저 action과 최대 5회의 모델 호출로 제한되며, 추가 모델 호출 전에 서버 quota callback을 통과해야 합니다. 설정되지 않은 방은 브라우저 도구를 사용하지 않습니다. OpenClaw 2.0 계열 gateway는 `COMMUNITY_OPENCLAW_BASE_URL`, `COMMUNITY_OPENCLAW_TOKEN`, 선택적 agent id를 서버 환경 변수로 명시했을 때 adapter를 통해 연결됩니다. 라이브 배포에서는 별도 `2026.9.5` Gateway와 실제 모델을 연결하고, 공동 브라우저에서 Example Domain을 열어 읽은 뒤 한국어 답변을 반환하는 경로를 검증했습니다.
 
 방별 OCI 데스크톱은 운영자가 별도 컨테이너를 provision하고 서버 측 map에 등록해야 하며, 새 방에 자동으로 제공되지 않습니다.
 
@@ -50,7 +50,7 @@ Docker/OCI 예시는 [deploy/README.md](deploy/README.md)에 있습니다. 공�
 npm test -w @open-grokbot/community
 ```
 
-현재 community 테스트는 37개이며 인증·권한·초대·첨부·데스크톱 티켓/프록시·CDP 연결·모델 도구 루프와 기본 방 동작을 점검합니다. 로컬 테스트는 `build`가 필요한 runner와 community 작업을 함께 확인하며, 공개 URL의 운영 부하 검증은 별도 작업입니다.
+현재 community 테스트는 39개이며 인증·권한·초대·첨부·데스크톱 티켓/프록시·CDP 연결·모델 도구 루프와 기본 방 동작을 점검합니다. 로컬 테스트는 `build`가 필요한 runner와 community 작업을 함께 확인하며, 공개 URL의 운영 부하 검증은 별도 작업입니다.
 
 ## 라이선스와 attribution
 

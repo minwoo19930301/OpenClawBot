@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { BROWSER_TOOL_DEFINITIONS } from "../../browser-tools.mjs";
+import { normalizeBotOutput } from "../../model-output.mjs";
 
 const MAX_TEXT = 8000;
 
@@ -82,7 +83,7 @@ export class OpenClawHttpAdapter {
       }
       const text = extractText(payload);
       if (!text) throw new Error("OpenClaw gateway returned no text");
-      return text.startsWith("SendMessage:") ? text.slice(0, MAX_TEXT) : `SendMessage: ${JSON.stringify({ type: "text", content: text.slice(0, 4000) })}`;
+      return normalizeBotOutput(text);
       }
       throw new Error("OpenClaw browser turn budget exhausted");
     } catch (error) {

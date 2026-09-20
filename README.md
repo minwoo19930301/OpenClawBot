@@ -7,7 +7,19 @@
 - 포트폴리오 요약: [docs/portfolio-ko.md](docs/portfolio-ko.md)
 - 보안 범위와 제보: [SECURITY.md](SECURITY.md)
 
-모델 provider/API key는 저장소에 포함하지 않으며 서버 환경 변수로만 주입합니다. 아직 외부 LLM 비용을 발생시키지 않는 배포는 모델 환경 변수를 비워 사람 간 대화만 허용할 수 있습니다. OpenClaw 2.0 계열 gateway 연결은 별도 환경 변수로 활성화하는 adapter이며, 최종 운영 검증 전에는 실서비스 동작을 보장하지 않습니다. 이미지 인식과 음성 전사는 구현하지 않았고, 방별 데스크톱은 운영자가 별도로 provision해야 합니다.
+라이브 앱은 OpenClaw 2.0 계열 `2026.9.5`의 별도 Gateway에 연결되어 있습니다. 실제 모델 응답과 공동 브라우저의 페이지 이동·내용 확인을 검증했습니다. 초대 계정으로 로그인해 사용하며, provider/API key는 서버에만 보관합니다. 이미지·음성 첨부와 재생을 지원하지만 이미지 인식과 음성 전사는 구현하지 않았고, 방별 데스크톱은 운영자가 별도로 생성해야 합니다.
+
+```mermaid
+flowchart LR
+    User[초대된 사용자] --> HTTPS[Caddy HTTPS]
+    HTTPS --> App[Community 웹앱 · 인증 · 방 권한]
+    App --> DB[(SQLite · 첨부)]
+    App --> Gateway[별도 OpenClaw Gateway]
+    Gateway --> Model[모델 공급자]
+    App --> Desktop[방 전용 Linux · Chromium]
+```
+
+[GitHub CI](https://github.com/minwoo19930301/open-grokbot/actions/workflows/ci.yml)는 Node.js 24에서 전체 빌드·테스트·타입 검사를 실행합니다. 커뮤니티 앱 테스트는 39개이며, 공개 부하 테스트 결과를 의미하지는 않습니다.
 
 원본 상용 Grok Bot의 유출 소스·자산·비공개 자격 증명은 포함하지 않습니다. 공개 upstream 프레임워크의 코드와 GPL 라이선스는 유지하며, 출처와 추가 구현 범위는 [LICENSE](LICENSE)와 [apps/community/README.md](apps/community/README.md)에 명시합니다.
 

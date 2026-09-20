@@ -1,5 +1,5 @@
 import { BROWSER_TOOL_DEFINITIONS } from './browser-tools.mjs';
-const envelope = content => 'SendMessage: ' + JSON.stringify({type:'text',content});
+import { normalizeBotOutput } from './model-output.mjs';
 export class ApiLlm {
   constructor(env) {
     this.name=env.COMMUNITY_LLM_MODEL;
@@ -42,7 +42,7 @@ export class ApiLlm {
       }
       const content=message?.content;
       if(typeof content!=='string'||!content.trim())throw new Error('Empty model response');
-      return content.startsWith('SendMessage:')?content.slice(0,8000):envelope(content.slice(0,4000));
+      return normalizeBotOutput(content);
     }
     throw new Error('Browser turn budget exhausted');
   }

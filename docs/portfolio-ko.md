@@ -1,15 +1,23 @@
-# OpenGrokbot 사용자 커뮤니티 앱
+# Open-Grokbot 기반 공동 AI 작업 공간
 
-이 작업은 [Open-Grokbot upstream](https://github.com/LING71671/open-grokbot)의 GPL-3.0-only clean-room 프레임워크를 기반으로, 초대 기반 사용자 커뮤니티 웹앱을 별도 구현한 사례다. upstream 프레임워크 자체를 처음부터 만들었다고 주장하지 않으며, 아래의 제품 표면과 운영 경계를 구현·검증하는 데 기여했다.
+[서비스](https://168.107.91.96) · [GitHub](https://github.com/minwoo19930301/open-grokbot) · [CI](https://github.com/minwoo19930301/open-grokbot/actions/workflows/ci.yml)
 
-- 초대 전용 가입, scrypt 비밀번호 해시, HttpOnly 세션, CSRF 방어와 관리자 초대 흐름
-- 방별 멤버 ACL, 메시지·초대·첨부 접근 제어, 일일 사용자·전역 quota
-- 이미지·음성 파일의 크기·MIME·서명 검증과 미게시 첨부의 업로더 전용 접근
-- Docker/OCI 배포 구성과 서버 측 방별 데스크톱 map, 티켓 기반 same-origin WebSocket 프록시
-- 제한된 브라우저 도구 루프와 OpenAI 호환 모델 adapter, OpenClaw 2.0 계열 gateway adapter의 server-only 환경 변수 연결
+## 이력서용 요약
 
-외부 LLM 비용 없이 사람 간 대화만 실행할 수 있으며 provider/API key는 저장소에 포함하지 않는다. 이미지 인식과 음성 전사는 구현하지 않았고, 방별 데스크톱은 운영자의 수동 provision이 필요하다. OpenClaw adapter는 환경 변수로 명시적으로 활성화되지만 현재 별도 gateway 연결 작업 중이므로 최종 운영 검증 전에는 실서비스 동작을 보장하지 않는다.
+오픈소스 Open-Grokbot 프레임워크를 확장해 초대 기반 공동 AI 웹앱을 구현하고 OCI ARM 서버에 배포했습니다. OpenClaw 실행 엔진, 방별 접근 제어, 사진·음성 첨부, 브라우저에서 조작하는 원격 Linux 데스크톱을 연결했습니다.
 
-검증 명령은 `npm test -w @open-grokbot/community`이며, 테스트는 인증·방 ACL·초대·첨부·데스크톱 티켓/프록시·모델 도구 루프를 대상으로 한다. 공개 URL의 부하·장기 운영 검증 결과를 성과로 주장하지 않는다.
+- scrypt 비밀번호 해시, HttpOnly 세션, CSRF 방어, 일회성 초대와 방별 멤버 권한을 구현했습니다.
+- 사진·음성 업로드의 크기·MIME·파일 서명을 검증하고, 공개 전 첨부 접근과 게시 후 방 멤버 접근을 분리했습니다.
+- OpenClaw Gateway를 개인 봇과 분리하고 사용자·방·봇·턴별 세션 구분, 모델 호출 한도와 브라우저 도구 실행 제한을 적용했습니다.
+- noVNC와 인증된 WebSocket 프록시로 원격 Linux 화면의 확대·키보드·마우스 제어를 구현하고, CDP로 봇의 브라우저 조작을 연결했습니다.
+- Docker·Caddy HTTPS·SQLite 영속 볼륨으로 배포하고 GitHub Actions에서 빌드·테스트·타입 검사를 자동화했습니다.
 
-라이선스는 저장소의 [GPL-3.0-only LICENSE](../LICENSE)를 따르며, 원본 제품의 소스·자산·비공개 자격 증명을 포함하지 않는다.
+**기술:** Node.js 24, JavaScript/TypeScript, SQLite, OpenClaw, Docker Compose, OCI ARM64, Caddy, noVNC, WebSocket, Playwright/CDP.
+
+## 구현 범위와 검증
+
+기반 프레임워크는 [LING71671/open-grokbot](https://github.com/LING71671/open-grokbot)이며 GPL-3.0-only 라이선스와 원저작자 출처를 유지합니다. 추가 구현 범위는 `apps/community`의 웹앱·권한·미디어·원격 데스크톱·OpenClaw 연결과 배포·CI입니다. 상용 Grok Bot의 유출 소스나 자산은 포함하지 않습니다.
+
+커뮤니티 테스트 39개와 전체 빌드·타입 검사를 통과했습니다. 실제 OCI 서버의 OpenClaw `2026.9.5`에서 모델 응답을 받고, 공동 브라우저로 Example Domain을 연 뒤 내용을 읽어 한국어로 답하는 경로를 검증했습니다. 임시 테스트 DB에서 가입·방 생성·메시지 전송·실제 모델 응답 저장도 확인했습니다. 이 수치는 동시 사용자 부하나 장기 운영 성과를 뜻하지 않습니다.
+
+사진·음성은 첨부·녹음·재생을 지원하며 이미지 인식·음성 전사는 아직 지원하지 않습니다. 방마다 데스크톱이 자동 생성되지는 않으며, 운영자가 별도 컨테이너를 연결합니다. 서비스 이용에는 초대 계정이 필요하고 모델 공급자의 요금과 사용 한도가 적용됩니다.

@@ -29,8 +29,8 @@ vnc_pid=$!
 websockify --web=/usr/share/novnc "$ws_port" "127.0.0.1:$vnc_port" >/run/desktop/websockify.log 2>&1 &
 ws_pid=$!
 
-# Do not add --no-sandbox. Debian's Chromium sandbox must remain enabled.
-chromium \
+# Do not add --no-sandbox. Chrome's Linux sandbox must remain enabled.
+google-chrome \
   --display="$display" \
   --user-data-dir=/home/desktop/chromium \
   --remote-debugging-address=127.0.0.1 \

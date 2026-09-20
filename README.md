@@ -1,4 +1,4 @@
-# Open-Grokbot community app
+# OpenClawBot community app
 
 이 fork에는 [Open-Grokbot upstream](https://github.com/LING71671/open-grokbot)의 GPL-3.0-only clean-room 프레임워크를 바탕으로 구현한 초대 기반 사용자 커뮤니티 웹앱이 추가되어 있습니다. 원본 프레임워크의 구조·런타임·프로토콜 문서는 아래에 유지하며, 이번 커뮤니티 앱의 코드는 계정 인증, 방별 ACL, 첨부파일, Docker/OCI 배포, 브라우저 데스크톱 프록시, OpenClaw adapter에 집중합니다.
 
@@ -16,7 +16,7 @@ flowchart LR
     App --> DB[(SQLite · 첨부)]
     App --> Gateway[별도 OpenClaw Gateway]
     Gateway --> Model[모델 공급자]
-    App --> Desktop[방 전용 Linux · Chromium]
+    App --> Desktop[방 전용 Linux · Google Chrome]
 ```
 
 [GitHub CI](https://github.com/minwoo19930301/open-grokbot/actions/workflows/ci.yml)는 Node.js 24에서 전체 빌드·테스트·타입 검사를 실행합니다. 테스트 범위는 소스의 현재 test runner 결과를 기준으로 하며, 공개 부하 테스트 결과를 의미하지 않습니다.

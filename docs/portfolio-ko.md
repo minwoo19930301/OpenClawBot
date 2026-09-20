@@ -1,10 +1,10 @@
-# Open-Grokbot 기반 공동 AI 작업 공간
+# OpenClawBot 기반 공동 AI 작업 공간
 
 [서비스](https://168.107.91.96) · [GitHub](https://github.com/minwoo19930301/open-grokbot) · [CI](https://github.com/minwoo19930301/open-grokbot/actions/workflows/ci.yml)
 
 ## 이력서용 요약
 
-오픈소스 Open-Grokbot 프레임워크를 확장해 초대 기반 공동 AI 웹앱을 구현하고 OCI ARM 서버에 배포했습니다. OpenClaw 실행 엔진, 방별 접근 제어, 사진·음성 첨부, 브라우저에서 조작하는 원격 Linux 데스크톱을 연결했습니다.
+오픈소스 Open-Grokbot 프레임워크를 바탕으로 OpenClawBot 초대 기반 공동 AI 웹앱을 구현하고 OCI ARM 서버에 배포했습니다. OpenClaw 실행 엔진, 방별 접근 제어, 사진·음성 첨부, 브라우저에서 조작하는 원격 Linux 데스크톱을 연결했습니다.
 
 - scrypt 비밀번호 해시, HttpOnly 세션, CSRF 방어, 일회성 초대와 방별 멤버 권한을 구현했습니다.
 - 사진·음성 업로드의 크기·MIME·파일 서명을 검증하고, 공개 전 첨부 접근과 게시 후 방 멤버 접근을 분리했습니다.

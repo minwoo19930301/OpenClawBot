@@ -923,7 +923,7 @@ if (
 ) {
   startCommunity()
     .then((app) => {
-      console.log("OpenGrokbot: " + app.url);
+      console.log("OpenClawBot: " + app.url);
       for (const signal of ["SIGINT", "SIGTERM"])
         process.once(signal, () => {
           void app.close().then(() => process.exit(0));
@@ -931,7 +931,7 @@ if (
     })
     .catch(() => {
       console.error(
-        "OpenGrokbot startup failed; check configuration and storage permissions.",
+        "OpenClawBot startup failed; check configuration and storage permissions.",
       );
       process.exitCode = 1;
     });

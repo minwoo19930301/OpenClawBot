@@ -1,4 +1,4 @@
-# OpenGrokbot community app
+# OpenClawBot community app
 
 이 앱은 [Open-Grokbot upstream](https://github.com/LING71671/open-grokbot)의 GPL-3.0-only clean-room 프레임워크를 바탕으로 별도 구현한 사용자 커뮤니티 표면입니다. upstream의 구조·런타임·프로토콜 문서는 저장소에 유지하며, 이 앱에서 추가한 계정 인증, 방별 ACL, 첨부파일, Docker/OCI 배포, 브라우저 데스크톱 프록시와 OpenClaw adapter의 범위를 설명합니다. 원본 제품과의 제휴를 주장하지 않으며 원본 소스·자산·비공개 자격 증명을 포함하지 않습니다.
 

@@ -25,7 +25,7 @@ self.addEventListener("push", (event) => {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) payload = {};
   const title = typeof payload.title === "string" && payload.title.trim()
     ? payload.title
-    : "Open Grokbot";
+    : "OpenClawBot";
   const options = {
     body: typeof payload.body === "string" ? payload.body : "",
     tag: typeof payload.tag === "string" ? payload.tag : undefined,

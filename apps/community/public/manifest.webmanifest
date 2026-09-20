@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "Open Grokbot",
-  "short_name": "Grokbot",
+  "name": "OpenClawBot",
+  "short_name": "OpenClawBot",
   "description": "초대 기반 공동 봇 대화",
   "lang": "ko",
   "start_url": "/",

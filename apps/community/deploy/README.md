@@ -1,15 +1,15 @@
-# Singapore Docker deployment
+# OpenClawBot Singapore Docker deployment
 
 Live deployment: [https://168.107.91.96](https://168.107.91.96), Oracle Linux 9 ARM64 on the existing 4 OCPU / 24 GB host. No new OCI instance, volume, or load balancer is required by this change. OCI free allowances and model provider billing must be checked against the account's actual usage; the deployment does not enforce a zero-dollar billing cap.
 
-The app, shared Linux desktop, Caddy, and optional OpenClaw gateway run in separate containers. The website gateway has its own state volume, workspace, authentication token, and private Docker network. It has no Telegram channel, personal OpenClaw state, host home directory, Docker socket, or host file mount. The host's pre-existing personal OpenClaw service remains separate.
+The OpenClawBot app, shared Linux desktop, Caddy, and optional OpenClaw gateway run in separate containers. The website gateway has its own state volume, workspace, authentication token, and private Docker network. It has no Telegram channel, personal OpenClaw state, host home directory, Docker socket, or host file mount. The host's pre-existing personal OpenClaw service remains separate.
 
 ## Services
 
 - Public site: `https://168.107.91.96`. Caddy requests and automatically renews a Let's Encrypt `shortlived` IP certificate. Only ports 80/443 are published to the Internet.
 - App: Node 24, SQLite and media in the `community_community-data` Docker volume; loopback port 8787 for local diagnostics.
 - OpenClaw: pinned official `ghcr.io/openclaw/openclaw:2026.9.5` image, optional `openclaw` Compose profile, private service `openclaw:18890`, no published gateway port. `tools.deny: ["*"]` disables built-in tools; the application executes only its validated room browser client tools. The example uses the operator's configured Groq model, without enabling other providers or automatic paid fallbacks.
-- Room computer: Debian, Xvfb, Openbox, Chromium with its sandbox enabled. noVNC traffic is proxied through the app with login, room membership, Origin checks and a single-use 60-second ticket. Host-published VNC/CDP ports bind to host loopback; the app container reaches the mapped desktop through the dedicated `community-desktop` network using the desktop service hostname and internal ports.
+- Room computer: Debian, Xvfb, Openbox, Google Chrome with its sandbox enabled. The multi-architecture image downloads the official Google Chrome `.deb` for `amd64` or `arm64`; the ARM64 candidate was verified with Google Chrome `153.0.8010.52`, including sandboxed startup, page navigation, screenshot capture and the VNC handshake. noVNC traffic is proxied through the app with login, room membership, Origin checks and a single-use 60-second ticket. Host-published VNC/CDP ports bind to host loopback; the app container reaches the mapped desktop through the dedicated `community-desktop` network using the desktop service hostname and internal ports.
 - A room maps to its own desktop container. The provisioned initial room is `4bc4b8f0-1789-4afb-a927-e7adbcc7b9b9`. Newly created chat rooms have no computer until an operator provisions a distinct container and adds it to the server-side mapping. A computer may not be shared by unrelated rooms.
 - Shared desktop storage is temporary (512 MB RAM filesystem); browser login state and downloads disappear when its container is recreated. All members of that room can see and control the same computer.
 
@@ -23,7 +23,7 @@ Optional Web Push uses `COMMUNITY_PUSH_SUBJECT`, `COMMUNITY_PUSH_PUBLIC_KEY`, an
 
 The first account created with the bootstrap invitation becomes the administrator and owns the initial shared room. Later accounts need single-use, 24-hour site invitations; room membership separately requires a room invitation. Passwords are individually salted/scrypt hashed, and session cookies are HttpOnly/Secure/SameSite=Strict.
 
-Before admitting users, install and enable the scoped desktop egress firewall, Docker forwarding drop-in, and bridge sysctl described in `desktop/README.md`; these host files are not installed by Compose. Chromium sandbox requirements and any narrow seccomp additions are documented there. Never use `--no-sandbox`, privileged containers, host filesystem mounts or the Docker socket in the shared desktop.
+Before admitting users, install and enable the scoped desktop egress firewall, Docker forwarding drop-in, and bridge sysctl described in `desktop/README.md`; these host files are not installed by Compose. Google Chrome sandbox requirements and any narrow seccomp additions are documented there. Never use `--no-sandbox`, privileged containers, host filesystem mounts or the Docker socket in the shared desktop.
 
 Start services from this directory with `docker compose up -d --no-build`. Restart policies bring them back after Docker/host restart. Never run `docker compose down -v` unless intentionally deleting the site database, uploads, and certificate data.
 

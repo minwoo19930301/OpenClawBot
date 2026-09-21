@@ -1,5 +1,11 @@
 # OpenClawBot
 
+<!-- PROJECT-PRESENTATION:START -->
+<a href="https://168.107.91.96"><img src="docs/images/openclawbot-chat.png" alt="OpenClawBot" width="960"></a>
+
+[![OPEN APP](https://img.shields.io/badge/OPEN%20APP-2C6049?style=for-the-badge)](https://168.107.91.96) [![QUICK START](https://img.shields.io/badge/QUICK%20START-374151?style=for-the-badge)](#로컬-실행) [![SOURCE](https://img.shields.io/badge/SOURCE-444444?style=for-the-badge)](https://github.com/minwoo19930301/OpenClawBot)
+<!-- PROJECT-PRESENTATION:END -->
+
 <p align="center">
   <strong>함께 대화하고, 같은 Chrome을 조작하는 OpenClaw 커뮤니티</strong>
 </p>

@@ -61,9 +61,9 @@ docker stats --no-stream
 
 Keep backups of the app data volume and the server-only configuration before releases. An SQLite backup must use SQLite's backup API (or stop only the app while copying its database/WAL together). The deployment adds no access to the existing OpenClaw configuration or personal conversation state.
 
-## Canonical hostname migration (prepared)
+## Optional hostname migration (on hold)
 
-The requested hostname is `bot.ai-ing.org`. `Caddyfile.domain` is the staged configuration: it serves that hostname and redirects the previous IP URL. Until authoritative DNS access and a valid hostname certificate are verified, the running Compose file keeps `Caddyfile.ip` and the IP origin. Do not switch the application origin merely because this prepared file exists.
+The canonical address remains `https://168.107.91.96/` by user choice. DNS migration is on hold; a custom hostname is not required for the existing HTTPS PWA. The optional hostname is `bot.ai-ing.org`. `Caddyfile.domain` is the staged configuration: it serves that hostname and redirects the previous IP URL. Until authoritative DNS access and a valid hostname certificate are verified, the running Compose file keeps `Caddyfile.ip` and the IP origin. Do not switch the application origin merely because this prepared file exists.
 
 Cutover order:
 

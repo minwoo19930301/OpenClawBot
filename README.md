@@ -1,4 +1,22 @@
-# OpenClawBot community app
+# OpenClawBot
+
+<p align="center">
+  <strong>함께 대화하고, 같은 Chrome을 조작하는 OpenClaw 커뮤니티</strong>
+</p>
+<p align="center">
+  <a href="https://168.107.91.96/"><img src="https://img.shields.io/badge/OpenClawBot-서비스_열기-2563eb?style=for-the-badge&amp;logo=googlechrome&amp;logoColor=white" alt="OpenClawBot 서비스 열기" /></a>
+  <a href="https://github.com/minwoo19930301/OpenClawBot/actions/workflows/ci.yml"><img src="https://github.com/minwoo19930301/OpenClawBot/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+</p>
+<p align="center">
+  <a href="https://168.107.91.96/"><strong>↗ OpenClawBot 접속</strong></a> ·
+  <a href="apps/community/README.md">사용 안내</a> ·
+  <a href="docs/portfolio-ko.md">프로젝트 소개</a> ·
+  <a href=".agents/skills/oci-openclaw-ops/SKILL.md">OCI 운영 스킬</a>
+</p>
+
+> **접속 주소:** https://168.107.91.96/ · 초대 기반 서비스입니다. 기존 회원은 아이디와 비밀번호로 로그인합니다. 가입 코드와 API 키는 공개하지 않습니다.
+>
+> **홈 화면 앱(PWA):** 현재 HTTPS IP 주소를 그대로 사용합니다. 홈 화면에 추가한 뒤 로그인하고 **알림 켜기 → 테스트 알림 보내기**로 기기 수신을 확인하세요. 실제 설치·알림 지원은 브라우저와 기기 설정에 따라 다릅니다.
 
 이 fork에는 [Open-Grokbot upstream](https://github.com/LING71671/open-grokbot)의 GPL-3.0-only clean-room 프레임워크를 바탕으로 구현한 초대 기반 사용자 커뮤니티 웹앱이 추가되어 있습니다. 원본 프레임워크의 구조·런타임·프로토콜 문서는 아래에 유지하며, 이번 커뮤니티 앱의 코드는 계정 인증, 방별 ACL, 첨부파일, Docker/OCI 배포, 브라우저 데스크톱 프록시, OpenClaw adapter에 집중합니다.
 

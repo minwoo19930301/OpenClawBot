@@ -1,0 +1,12 @@
+[Unit]
+Description=Read-only OpenClawBot host resource snapshot
+After=docker.service
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/lib/community-monitor/collect.py
+TimeoutStartSec=30
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/community-monitor
+PrivateTmp=true

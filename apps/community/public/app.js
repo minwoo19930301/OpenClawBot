@@ -1,3 +1,4 @@
+const MONITOR_ROOM = "00000000-0000-4000-8000-000000000001";
 import { createDesktopUI } from "/desktop.js";
 import { createPwaController } from "/pwa.js";
 
@@ -305,11 +306,12 @@ async function selectRoom(id) {
     els.roomTitle.textContent = room.name;
     els.mobileRoomTitle.textContent = room.name;
     els.roomDescription.textContent = room.description || "";
-    const canInvite =
-      room.role === "owner" || state.session.user.role === "admin";
+    const canInvite = room.id !== MONITOR_ROOM &&
+      (room.role === "owner" || state.session.user.role === "admin");
     els.roomKicker.textContent = canInvite ? "방장" : "공동 대화";
     $("#room-invite-button").classList.toggle("is-hidden", !canInvite);
   }
+  updateBotLabel();
   await refreshRoom(true);
   startPolling();
 }
@@ -505,6 +507,10 @@ function renderBotPicker() {
   updateBotLabel();
 }
 function updateBotLabel() {
+  if (state.selectedRoom === MONITOR_ROOM) {
+    $("#bot-picker-label").textContent = "서버 모니터 · 실측 상태 설명 · AI 호출 없음";
+    return;
+  }
   const selected = state.selectedBots
     .map((id) => state.bots.find((bot) => bot.id === id)?.name)
     .filter(Boolean);

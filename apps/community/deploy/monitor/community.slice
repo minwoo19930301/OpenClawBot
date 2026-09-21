@@ -1,0 +1,10 @@
+[Unit]
+Description=Aggregate resource budget for all OpenClawBot containers
+[Slice]
+CPUAccounting=true
+MemoryAccounting=true
+CPUQuota=300%
+MemoryHigh=14G
+MemoryMax=16G
+MemorySwapMax=0
+TasksMax=1536

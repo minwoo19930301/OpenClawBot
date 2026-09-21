@@ -20,6 +20,8 @@ import { createBrowserTools } from "./browser-tools.mjs";
 import { prepareMediaDir, cleanupOrphans, receiveAttachment, finalizeAttachment, MAX_DEFAULT } from "./media.mjs";
 import { createPushService, validateSubscription, validateEndpoint } from "./push.mjs";
 
+import { MONITOR_ROOM, readMonitor, explainMonitor } from "./monitor.mjs";
+
 const scrypt = promisify(scryptCallback);
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SESSION_MS = 14 * 86400000;
@@ -176,6 +178,26 @@ export async function startCommunity(options = {}) {
   }, 15 * 60000);
   mediaCleanupTimer.unref();
 
+  let monitorBusy = false;
+  async function monitorTick() {
+    if (closing || monitorBusy || !env.COMMUNITY_MONITOR_PATH) return;
+    if (!db.prepare("SELECT 1 FROM rooms WHERE id=?").get(MONITOR_ROOM)) return;
+    monitorBusy = true;
+    try {
+      const snapshot = await readMonitor(env.COMMUNITY_MONITOR_PATH);
+      if (closing) return;
+      const state = !snapshot.available ? "unavailable" : JSON.stringify({ limits: snapshot.limitsVerified === true, disk: snapshot.diskUsedPercent >= 85, memory: snapshot.communityMemoryGiB >= snapshot.communityLimitGiB * .85 });
+      const old = db.prepare("SELECT value FROM settings WHERE key='monitor_state'").get()?.value;
+      if (old !== state) {
+        insertMessage(MONITOR_ROOM, "bot", "서버 모니터", explainMonitor(snapshot));
+        db.prepare("INSERT INTO settings(key,value) VALUES('monitor_state',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(state);
+        db.prepare("DELETE FROM messages WHERE room_id=? AND id NOT IN (SELECT id FROM messages WHERE room_id=? ORDER BY created_at DESC,rowid DESC LIMIT 200)").run(MONITOR_ROOM, MONITOR_ROOM);
+      }
+    } finally { monitorBusy = false; }
+  }
+  const monitorTimer = setInterval(() => { void monitorTick().catch(() => {}); }, 60000);
+  monitorTimer.unref();
+
   function transaction(fn) {
     db.exec("BEGIN IMMEDIATE");
     try {
@@ -264,6 +286,7 @@ export async function startCommunity(options = {}) {
         "SELECT r.*,m.role member_role FROM rooms r JOIN room_members m ON r.id=m.room_id WHERE r.id=? AND m.user_id=?",
       )
       .get(id, user.id);
+    if (id === MONITOR_ROOM && user.role !== "admin") throw failure(404, "방을 찾을 수 없습니다.");
     if (!room) throw failure(404, "방을 찾을 수 없습니다.");
     return room;
   }
@@ -725,7 +748,18 @@ export async function startCommunity(options = {}) {
         );
         return reply(res, 201, { token: raw, expiresAt });
       }
+      if (url.pathname === "/api/admin/monitor" && method === "GET") {
+        if (user.role !== "admin") throw failure(403, "관리자 전용입니다.");
+        return reply(res, 200, await readMonitor(env.COMMUNITY_MONITOR_PATH));
+      }
       if (url.pathname === "/api/rooms" && method === "GET") {
+        if (env.COMMUNITY_MONITOR_PATH && user.role === "admin") {
+          transaction(() => {
+            db.prepare("INSERT OR IGNORE INTO rooms VALUES(?,?,?,?,?)").run(MONITOR_ROOM, "서버 모니터링", "관리자 전용 · 자원 제한 및 상태 · AI 비용 없음", user.id, Date.now());
+            db.prepare("INSERT OR IGNORE INTO room_members VALUES(?,?,?)").run(MONITOR_ROOM, user.id, "owner");
+          });
+          if (!db.prepare("SELECT 1 FROM messages WHERE room_id=?").get(MONITOR_ROOM)) insertMessage(MONITOR_ROOM, "bot", "서버 모니터", explainMonitor(await readMonitor(env.COMMUNITY_MONITOR_PATH)));
+        }
         const rooms = db
           .prepare(
             "SELECT r.*,m.role member_role FROM rooms r JOIN room_members m ON r.id=m.room_id WHERE m.user_id=? ORDER BY r.created_at DESC",
@@ -816,6 +850,7 @@ export async function startCommunity(options = {}) {
         });
       }
       if (match[2] === "invites" && method === "POST") {
+        if (room.id === MONITOR_ROOM) throw failure(403, "모니터링 방은 관리자 전용입니다.");
         if (room.member_role !== "owner" && user.role !== "admin")
           throw failure(403, "방장만 방 초대를 만들 수 있습니다.");
         limit("invite:" + user.id, 20);
@@ -850,6 +885,16 @@ export async function startCommunity(options = {}) {
             .get(room.id, scopedNonce)
         )
           return reply(res, 202, { accepted: true });
+        if (room.id === MONITOR_ROOM) {
+          if (attachmentIds.length) throw failure(400, "모니터링 방에는 파일을 첨부하지 않습니다.");
+          limit("monitor:" + user.id, 10);
+          const report = explainMonitor(await readMonitor(env.COMMUNITY_MONITOR_PATH));
+          transaction(() => {
+            insertMessageWithAttachments(room.id, user.displayName, content, user.id, scopedNonce, []);
+            insertMessage(room.id, "bot", "서버 모니터", report);
+          });
+          return reply(res, 202, { accepted: true });
+        }
         if (selected.length && !llm)
           throw failure(
             503,
@@ -905,6 +950,7 @@ export async function startCommunity(options = {}) {
       (closePromise ??= (async () => {
         closing = true;
         clearInterval(mediaCleanupTimer);
+        clearInterval(monitorTimer);
         await mediaCleanupPromise;
         for (const controller of controllers) controller.abort();
         desktopHub.close();

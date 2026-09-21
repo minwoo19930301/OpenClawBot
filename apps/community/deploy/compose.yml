@@ -12,13 +12,17 @@ services:
       args:
         RELEASE: ${COMMUNITY_RELEASE:-development}
     image: community-app:local
+    cgroup_parent: community.slice
     restart: unless-stopped
     init: true
     env_file: .env.production
+    environment:
+      COMMUNITY_MONITOR_PATH: /run/community-monitor/status.json
     ports:
       - '127.0.0.1:8787:8787'
     volumes:
       - community-data:/data
+      - /var/lib/community-monitor:/run/community-monitor:ro,z
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777
@@ -39,6 +43,7 @@ services:
     profiles: [openclaw]
     image: ghcr.io/openclaw/openclaw:2026.9.5
     command: [node, openclaw.mjs, gateway, --bind, lan, --port, '18890']
+    cgroup_parent: community.slice
     restart: unless-stopped
     init: true
     env_file: .env.openclaw
@@ -71,6 +76,7 @@ services:
   desktop-4bc4b8f0-1789-4afb-a927-e7adbcc7b9b9:
     build: ./desktop
     image: community-desktop:local
+    cgroup_parent: community.slice
     restart: unless-stopped
     init: true
     ports:
@@ -94,6 +100,7 @@ services:
         ipv4_address: 172.30.50.3
   caddy:
     image: caddy:2.11.4-alpine
+    cgroup_parent: community.slice
     restart: unless-stopped
     ports:
       - '80:80'

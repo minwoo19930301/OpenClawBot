@@ -74,3 +74,13 @@ Cutover order:
 5. Sign in again on the hostname. Install the PWA there and enable/test notifications on each user's device; IP-origin login cookies and push subscriptions do not transfer.
 
 The reusable operating skill is [oci-openclaw-ops](../../../.agents/skills/oci-openclaw-ops/SKILL.md). Copy that folder to your agent's skills directory if desired. Its public checker accepts an explicit HTTPS origin and optional expected release SHA.
+
+## 서버 전체 자원 제한과 관리자 모니터링
+
+운영 호스트는 systemd/cgroup v2를 사용합니다. Compose의 모든 서비스는 `community.slice` 아래에서 **합계 CPU 3개·RAM 16GiB**, swap 0으로 제한됩니다. 개별 컨테이너 제한도 함께 적용됩니다. 별도 개인 OpenClaw 서비스는 CPU 0.5개·RAM 2GiB로 제한해 OS 여유를 남깁니다. 새 OCI VM·디스크·유료 API fallback을 자동 생성하지 않습니다. 이 제한은 **OCI 무료 한도나 청구 차단 기능이 아닙니다**.
+
+운영자가 `monitor/community.slice`를 `/etc/systemd/system/`에 설치하고 daemon-reload/start한 뒤 Compose를 실행해야 합니다. 기존 컨테이너의 parent 변경에는 recreate가 필요합니다. `monitor/collect.py`는 `/usr/local/lib/community-monitor/collect.py`에 설치하고 `/var/lib/community-monitor`를 생성한 뒤 동봉한 service/timer를 활성화합니다. 개인 서비스에는 `systemctl set-property openclaw.service CPUQuota=50% MemoryMax=2G MemorySwapMax=0`을 적용합니다. 기존 사양과 볼륨은 유지합니다.
+
+수집기는 매분 호스트 RAM·디스크·실제 cgroup 제한을 읽어 원자적으로 JSON을 교체합니다. 웹앱에는 이 디렉터리만 읽기 전용으로 전달하며 **Docker socket이나 호스트 실행 권한을 전달하지 않습니다**. `COMMUNITY_MONITOR_PATH` 설정 시 관리자에게만 **서버 모니터링** 방이 생깁니다. 이 방은 초대할 수 없고, 질문에는 현재 수치를 규칙 기반으로 설명하며 모델 API를 호출하지 않습니다. 상태 전환(수집 중단·제한 확인 실패·디스크 85%·커뮤니티 RAM 85%)에만 메시지와 기존 PWA 경로로 알림을 발행합니다. 데이터가 3분 이상 오래되면 확인 불가로 표시합니다. 실제 OS 알림은 사용자 권한·기기 수신 확인이 필요합니다.
+
+디스크는 경고이며 파일시스템 전체 하드 쿼터가 아닙니다. 첨부파일은 기존 앱 저장량 제한, 컨테이너 로그는 회전 제한을 따릅니다. OCI 비용 데이터는 아직 이 수집기에 연결되지 않았으므로 청구액을 0원이라고 추정하지 않습니다. 대화별 데스크톱 자동 생성/유휴 정지는 별도 구현 대상이며 현재는 기존 방 매핑을 유지합니다.

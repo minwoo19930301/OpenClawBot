@@ -1,0 +1,4 @@
+interface:
+  display_name: "OCI OpenClaw 운영"
+  short_description: "OCI A1의 OpenClawBot 배포·Chrome·DNS·PWA 운영"
+  default_prompt: "$oci-openclaw-ops로 현재 OCI 배포를 확인하고 요청한 변경을 적용해줘."

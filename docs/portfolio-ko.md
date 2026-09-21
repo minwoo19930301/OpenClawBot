@@ -1,6 +1,6 @@
 # OpenClawBot 기반 공동 AI 작업 공간
 
-[서비스](https://168.107.91.96) · [GitHub](https://github.com/minwoo19930301/open-grokbot) · [CI](https://github.com/minwoo19930301/open-grokbot/actions/workflows/ci.yml)
+[서비스](https://168.107.91.96) · [GitHub](https://github.com/minwoo19930301/OpenClawBot) · [CI](https://github.com/minwoo19930301/OpenClawBot/actions/workflows/ci.yml)
 
 ## 이력서용 요약
 

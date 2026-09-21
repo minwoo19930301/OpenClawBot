@@ -60,3 +60,17 @@ docker stats --no-stream
 ```
 
 Keep backups of the app data volume and the server-only configuration before releases. An SQLite backup must use SQLite's backup API (or stop only the app while copying its database/WAL together). The deployment adds no access to the existing OpenClaw configuration or personal conversation state.
+
+## Canonical hostname migration (prepared)
+
+The requested hostname is `bot.ai-ing.org`. `Caddyfile.domain` is the staged configuration: it serves that hostname and redirects the previous IP URL. Until authoritative DNS access and a valid hostname certificate are verified, the running Compose file keeps `Caddyfile.ip` and the IP origin. Do not switch the application origin merely because this prepared file exists.
+
+Cutover order:
+
+1. Confirm the `ai-ing.org` zone and that `bot` has no conflicting record. Add a DNS-only A record `bot.ai-ing.org` → `168.107.91.96`.
+2. Serve the hostname alongside the current IP with Caddy and verify a publicly trusted certificate.
+3. Back up the server-only environment, set `COMMUNITY_ORIGIN=https://bot.ai-ing.org`, update `COMMUNITY_PUSH_SUBJECT` to the hostname URL without rotating VAPID keys, and recreate only the app.
+4. Switch the Caddy bind mount to `Caddyfile.domain` and restart Caddy. Confirm the IP redirect and hostname HTTPS health, then update public documentation and GitHub homepage links.
+5. Sign in again on the hostname. Install the PWA there and enable/test notifications on each user's device; IP-origin login cookies and push subscriptions do not transfer.
+
+The reusable operating skill is [oci-openclaw-ops](../../../.agents/skills/oci-openclaw-ops/SKILL.md). Copy that folder to your agent's skills directory if desired. Its public checker accepts an explicit HTTPS origin and optional expected release SHA.

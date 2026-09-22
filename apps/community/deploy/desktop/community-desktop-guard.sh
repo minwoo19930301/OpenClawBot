@@ -23,8 +23,8 @@ add chain inet community_desktop_guard output { type filter hook output priority
 add rule inet community_desktop_guard input ct state established,related accept
 add rule inet community_desktop_guard forward ct state established,related accept
 add rule inet community_desktop_guard output ct state established,related accept
-add rule inet community_desktop_guard input ip saddr $DESKTOP_IP ip daddr { 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.0.0.0/24, 192.0.2.0/24, 192.168.0.0/16, 198.18.0.0/15, 198.51.100.0/24, 203.0.113.0/24, 224.0.0.0/4, 240.0.0.0/4, $HOST_PUBLIC_IP/32 } reject
-add rule inet community_desktop_guard forward ip saddr $DESKTOP_IP ip daddr { 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.0.0.0/24, 192.0.2.0/24, 192.168.0.0/16, 198.18.0.0/15, 198.51.100.0/24, 203.0.113.0/24, 224.0.0.0/4, 240.0.0.0/4, $HOST_PUBLIC_IP/32 } reject
-add rule inet community_desktop_guard output ip saddr $DESKTOP_IP ip daddr { 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.0.0.0/24, 192.0.2.0/24, 192.168.0.0/16, 198.18.0.0/15, 198.51.100.0/24, 203.0.113.0/24, 224.0.0.0/4, 240.0.0.0/4, $HOST_PUBLIC_IP/32 } reject
+add rule inet community_desktop_guard input ip saddr 172.30.50.0/28 ip saddr != 172.30.50.2 ip daddr { 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.0.0.0/24, 192.0.2.0/24, 192.168.0.0/16, 198.18.0.0/15, 198.51.100.0/24, 203.0.113.0/24, 224.0.0.0/4, 240.0.0.0/4, $HOST_PUBLIC_IP/32 } reject
+add rule inet community_desktop_guard forward ip saddr 172.30.50.0/28 ip saddr != 172.30.50.2 ip daddr { 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.0.0.0/24, 192.0.2.0/24, 192.168.0.0/16, 198.18.0.0/15, 198.51.100.0/24, 203.0.113.0/24, 224.0.0.0/4, 240.0.0.0/4, $HOST_PUBLIC_IP/32 } reject
+add rule inet community_desktop_guard output ip saddr 172.30.50.0/28 ip saddr != 172.30.50.2 ip daddr { 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.0.0.0/24, 192.0.2.0/24, 192.168.0.0/16, 198.18.0.0/15, 198.51.100.0/24, 203.0.113.0/24, 224.0.0.0/4, 240.0.0.0/4, $HOST_PUBLIC_IP/32 } reject
 EOF
 } | nft -f -

@@ -21,6 +21,10 @@ done
 
 openbox >/run/desktop/openbox.log 2>&1 &
 openbox_pid=$!
+if command -v tint2 >/dev/null 2>&1; then
+  mkdir -p /home/desktop/Downloads
+  tint2 -c /etc/openclawbot/dock.tint2rc >/run/desktop/dock.log 2>&1 &
+fi
 
 # x11vnc is loopback-only. The app-facing websocket bridge is the only VNC
 # transport exposed on the container network; it has no unauthenticated host port.

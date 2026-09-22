@@ -203,7 +203,13 @@ export function createDesktopUI({ api, getRoomId, toast = () => {} }) {
     resetView();
     if (!roomId) return;
     try {
-      const data = await api(`/api/rooms/${encodeURIComponent(roomId)}/desktop`);
+      setStatus("전용 데스크톱 준비 중… 처음에는 잠시 걸릴 수 있습니다.");
+      let data = await api(`/api/rooms/${encodeURIComponent(roomId)}/desktop/start`, {method:"POST",body:"{}"});
+      for (let attempt=0; !data.available && attempt<20; attempt++) {
+        await new Promise(resolve=>setTimeout(resolve,1000));
+        if (request !== state.request || roomId !== state.roomId) return;
+        data = await api(`/api/rooms/${encodeURIComponent(roomId)}/desktop`);
+      }
       if (request !== state.request || roomId !== state.roomId) return;
       state.status = data;
       if (!data.configured) {
@@ -230,6 +236,7 @@ export function createDesktopUI({ api, getRoomId, toast = () => {} }) {
     panel.hidden = false;
     button.setAttribute("aria-expanded", "true");
     if (state.status?.configured && state.status.available && !state.rfb) connect(preview, true);
+    else if (!state.connecting) refreshStatus();
   };
   const togglePanel = () => {
     if (panel.hidden) openPanel();
@@ -261,6 +268,11 @@ export function createDesktopUI({ api, getRoomId, toast = () => {} }) {
   dialog.addEventListener("cancel", hideDialog);
   dialog.addEventListener("close", hideDialog);
 
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) disconnect();
+    else if (!panel.hidden && state.roomId && !dialog.open) refreshStatus();
+  });
+
   return {
     setRoom(roomId) {
       if (roomId === state.roomId) return;
@@ -268,6 +280,14 @@ export function createDesktopUI({ api, getRoomId, toast = () => {} }) {
       state.roomId = roomId || null;
       state.generation += 1;
       state.status = null;
+      if (roomId === "00000000-0000-4000-8000-000000000001" || !roomId) {
+        panel.hidden = true;
+        button.hidden = true;
+        return;
+      }
+      button.hidden = false;
+      panel.hidden = false;
+      button.setAttribute("aria-expanded", "true");
       refreshStatus();
     },
     reset() {

@@ -100,3 +100,9 @@ The reusable operating skill is [oci-openclaw-ops](../../../.agents/skills/oci-o
 - broker/호스트 재시작 시 managed 컨테이너를 정지하고, 다음 ensure에서 파일시스템 remount 후 시작합니다. 관리자 모니터링 방은 생성 대상이 아닙니다.
 
 검증: `python3 apps/community/deploy/provisioner/test_service.py` 및 community 테스트. 배포 순서: guard 업데이트 → managed 이미지 build → broker 설치/start → app build/recreate → 실제 두 방의 VNC/CDP·파일 분리·재시작 보존 확인. 아직 동시 실행 한도에 대기열 자동 예약 기능은 없으므로 안내를 보고 다시 열어야 합니다.
+
+### 모바일 제어 (배포 준비 중)
+
+제어하기·미리보기 확대·전체 화면은 모두 제어 모드로 시작합니다. 보기 전용은 사용자가 명시적으로 선택할 때만 적용합니다. noVNC 1.7.0의 길게 누르기 우클릭, 두 손가락 스크롤, 핀치 Ctrl+wheel(원격 Chrome 페이지 확대/축소)을 사용하며 원격 화면 자체의 핀치 확대를 별도 구현한 것은 아닙니다. 모바일은 사용자 클릭 시 전체 화면과 landscape lock을 요청하고, 허용되지 않으면 휴대폰 회전 안내를 표시합니다. 실제 iOS/Android 기기 동작은 별도 검증이 필요합니다.
+
+닫기 이벤트가 재오픈한 연결까지 끊던 경로를 제거하고, canvas 크기는 noVNC가 계산하도록 유지합니다. 연결 오류는 확대된 화면 안에도 표시합니다.

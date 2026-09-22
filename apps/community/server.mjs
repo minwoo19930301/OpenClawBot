@@ -499,6 +499,7 @@ export async function startCommunity(options = {}) {
           "/icons/icon-512.png": ["icons/icon-512.png", "image/png"],
           "/icons/apple-touch-icon.png": ["icons/apple-touch-icon.png", "image/png"],
           "/styles.css": ["styles.css", "text/css"],
+          "/desktop-screen.js": ["desktop-screen.js", "text/javascript"],
           "/desktop.js": ["desktop.js", "text/javascript"],
           "/desktop.css": ["desktop.css", "text/css"],
           "/vendor/novnc.js": ["vendor/novnc.js", "text/javascript"],

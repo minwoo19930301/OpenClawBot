@@ -1,0 +1,17 @@
+[Unit]
+Description=Bounded per-room OpenClawBot desktop broker
+Requires=docker.service community-desktop-firewall.service
+After=docker.service community-desktop-firewall.service
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/lib/community-provisioner/service.py
+Restart=on-failure
+RestartSec=5
+RuntimeDirectory=community-provisioner
+RuntimeDirectoryMode=0755
+UMask=0077
+CPUQuota=25%
+MemoryMax=128M
+TasksMax=32
+[Install]
+WantedBy=multi-user.target

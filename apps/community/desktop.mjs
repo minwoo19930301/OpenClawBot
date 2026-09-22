@@ -25,7 +25,7 @@ export function parseDesktops(value = '{}') {
   return desktops;
 }
 
-export function createDesktopHub({server, desktops, userFor, roomFor, originFor}) {
+export function createDesktopHub({server, desktops, userFor, roomFor, originFor, touch = () => {}}) {
   const tickets = new Map(), connections = new Set();
   const wss = new WebSocketServer({noServer:true, perMessageDeflate:false, maxPayload:1024*1024});
   function issueTicket(user, roomId) {
@@ -68,7 +68,7 @@ export function createDesktopHub({server, desktops, userFor, roomFor, originFor}
       upstream.on('error',()=>{client.close(1011,'OCI desktop unavailable');});
       client.on('error',cleanup); client.on('close',cleanup); upstream.on('close',()=>client.close());
       const monitor=setInterval(()=>{
-        try {const current=userFor(req); if(!current || current.sessionHash!==user.sessionHash) return cleanup(); roomFor(roomId,current); } catch {cleanup();}
+        try {const current=userFor(req); if(!current || current.sessionHash!==user.sessionHash) return cleanup(); roomFor(roomId,current); touch(roomId); } catch {cleanup();}
       },10000); monitor.unref();
       const lifetime=setTimeout(()=>client.close(1000,'Reconnect desktop'),60*60*1000); lifetime.unref();
       client.once('close',()=>{clearInterval(monitor);clearTimeout(lifetime);});

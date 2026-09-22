@@ -84,3 +84,19 @@ The reusable operating skill is [oci-openclaw-ops](../../../.agents/skills/oci-o
 수집기는 매분 호스트 RAM·디스크·실제 cgroup 제한을 읽어 원자적으로 JSON을 교체합니다. 웹앱에는 이 디렉터리만 읽기 전용으로 전달하며 **Docker socket이나 호스트 실행 권한을 전달하지 않습니다**. `COMMUNITY_MONITOR_PATH` 설정 시 관리자에게만 **서버 모니터링** 방이 생깁니다. 이 방은 초대할 수 없고, 질문에는 현재 수치를 규칙 기반으로 설명하며 모델 API를 호출하지 않습니다. 상태 전환(수집 중단·제한 확인 실패·디스크 85%·커뮤니티 RAM 85%)에만 메시지와 기존 PWA 경로로 알림을 발행합니다. 데이터가 3분 이상 오래되면 확인 불가로 표시합니다. 실제 OS 알림은 사용자 권한·기기 수신 확인이 필요합니다.
 
 디스크는 경고이며 파일시스템 전체 하드 쿼터가 아닙니다. 첨부파일은 기존 앱 저장량 제한, 컨테이너 로그는 회전 제한을 따릅니다. OCI 비용 데이터는 아직 이 수집기에 연결되지 않았으므로 청구액을 0원이라고 추정하지 않습니다. 대화별 데스크톱 자동 생성/유휴 정지는 별도 구현 대상이며 현재는 기존 방 매핑을 유지합니다.
+
+
+## 대화별 데스크톱 자동 생성
+
+> 이 기능은 배포 준비 중입니다. 실제 운영 반영 및 두 방 분리 검증 전까지 기존 사이트의 자동 생성 완료를 의미하지 않습니다.
+
+`COMMUNITY_PROVISIONER_SOCKET`을 설정하면 방을 열 때 인증·방 멤버십·CSRF 확인 후 로컬 Unix socket broker에 생성/시작을 요청합니다. 웹앱에는 Docker socket을 전달하지 않습니다. broker는 UUID만 받아 고정 이미지·네트워크·권한·상한으로만 실행합니다. `provisioner/community-provisioner.service`와 `provisioner/service.py`를 호스트에 설치해야 하며, 기존 방의 수동 map은 그대로 유지합니다.
+
+- 이미지: 검증된 `community-desktop:local`을 `desktop/Dockerfile.managed`로 확장한 `community-desktop:managed`. 하단 Tint2 독에 Terminal, Google Chrome, Files를 고정합니다.
+- 신규 데스크톱 동시 실행 2개(기존 공동 대화 데스크톱 별도), 저장 공간 4개까지. 각 1 CPU·2GiB이고 모두 기존 `community.slice` 합산 제한 안에 들어갑니다.
+- `/var/lib/community-desktops/<UUID>/home.ext4`의 512MiB 고정 파일시스템에 Chrome 프로필과 파일을 저장합니다. 호스트 여유 공간이 3GiB 미만이면 새 공간 생성을 거절합니다. 파일 삭제·추가 디스크 구매는 자동으로 하지 않습니다.
+- 연결된 화면은 짧은 lease를 갱신합니다. 화면 연결 종료/백그라운드 탭 전환 후 15분 동안 재연결하지 않으면 컨테이너를 정지합니다. 프로필/파일은 유지하지만 실행 중인 프로세스·미저장 편집 내용은 유지되지 않습니다.
+- IP `.4`–`.7`을 할당하며 desktop subnet 전체에서 앱 주소 `.2`를 제외한 egress를 host nft guard로 보호합니다. private/metadata/host 접근 및 데스크톱 간 신규 연결을 차단합니다. 기존 guard를 먼저 업데이트해야 하며 broker는 설정을 확인하지 못하면 생성하지 않습니다.
+- broker/호스트 재시작 시 managed 컨테이너를 정지하고, 다음 ensure에서 파일시스템 remount 후 시작합니다. 관리자 모니터링 방은 생성 대상이 아닙니다.
+
+검증: `python3 apps/community/deploy/provisioner/test_service.py` 및 community 테스트. 배포 순서: guard 업데이트 → managed 이미지 build → broker 설치/start → app build/recreate → 실제 두 방의 VNC/CDP·파일 분리·재시작 보존 확인. 아직 동시 실행 한도에 대기열 자동 예약 기능은 없으므로 안내를 보고 다시 열어야 합니다.

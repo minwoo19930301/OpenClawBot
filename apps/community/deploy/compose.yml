@@ -17,11 +17,13 @@ services:
     init: true
     env_file: .env.production
     environment:
+      COMMUNITY_PROVISIONER_SOCKET: /run/community-provisioner/control.sock
       COMMUNITY_MONITOR_PATH: /run/community-monitor/status.json
     ports:
       - '127.0.0.1:8787:8787'
     volumes:
       - community-data:/data
+      - /run/community-provisioner:/run/community-provisioner:ro,z
       - /var/lib/community-monitor:/run/community-monitor:ro,z
     read_only: true
     tmpfs:

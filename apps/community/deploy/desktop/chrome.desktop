@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Google Chrome
+Exec=google-chrome --user-data-dir=/home/desktop/chromium --no-first-run
+Icon=google-chrome
+Terminal=false

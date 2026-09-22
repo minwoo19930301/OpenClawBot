@@ -20,6 +20,7 @@ import { createBrowserTools } from "./browser-tools.mjs";
 import { prepareMediaDir, cleanupOrphans, receiveAttachment, finalizeAttachment, MAX_DEFAULT } from "./media.mjs";
 import { createPushService, validateSubscription, validateEndpoint } from "./push.mjs";
 
+import { createProvisioner } from "./provisioner.mjs";
 import { MONITOR_ROOM, readMonitor, explainMonitor } from "./monitor.mjs";
 
 const scrypt = promisify(scryptCallback);
@@ -157,6 +158,8 @@ export async function startCommunity(options = {}) {
   const configured = Boolean(llm);
   const push = createPushService({ db, env, sendImpl: options.pushSendImpl });
   const desktops = parseDesktops(env.COMMUNITY_DESKTOP_MAP);
+  const fixedDesktops = new Set(desktops.keys());
+  const provisioner = createProvisioner(env.COMMUNITY_PROVISIONER_SOCKET, desktops);
   const browserTools = options.browserTools ?? createBrowserTools({ desktops });
   let desktopHub;
   const initialRoomId = env.COMMUNITY_INITIAL_ROOM_ID;
@@ -625,9 +628,15 @@ export async function startCommunity(options = {}) {
         });
         return issueSession(account, res, 201);
       }
-      const desktopMatch = url.pathname.match(/^\/api\/rooms\/([a-f0-9-]{36})\/desktop(?:\/(ticket))?$/);
+      const desktopMatch = url.pathname.match(/^\/api\/rooms\/([a-f0-9-]{36})\/desktop(?:\/(ticket|start))?$/);
       if (desktopMatch) {
         const room = roomFor(desktopMatch[1], user);
+        if (room.id === MONITOR_ROOM) throw failure(409, "모니터링 방은 데스크톱을 만들지 않습니다.");
+        if (method === "POST" && desktopMatch[2] === "start") {
+          limit("desktop-start:"+user.id,10);
+          if (!fixedDesktops.has(room.id)) await provisioner.ensure(room.id);
+          return reply(res,200,await desktopHub.status(room.id));
+        }
         if (method === "GET" && !desktopMatch[2]) return reply(res,200,await desktopHub.status(room.id));
         if (method === "POST" && desktopMatch[2] === "ticket") {
           limit("desktop:"+user.id,20);
@@ -928,7 +937,7 @@ export async function startCommunity(options = {}) {
       });
     }
   });
-  desktopHub=createDesktopHub({server,desktops,userFor,roomFor,originFor:()=>origin||boundOrigin});
+  desktopHub=createDesktopHub({server,desktops,userFor,roomFor,touch:room=>provisioner.touch(room),originFor:()=>origin||boundOrigin});
   server.requestTimeout = 30000;
   server.headersTimeout = 10000;
   await new Promise((done, reject) => {

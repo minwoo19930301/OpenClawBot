@@ -8,7 +8,7 @@
 .desktop-preview, .desktop-dialog-view { display: grid; place-items: center; min-height: 190px; border: 1px solid var(--line); border-radius: 8px; background: #070707; color: var(--dim); overflow: hidden; }
 .desktop-preview { cursor: pointer; height: 218px; }
 .desktop-preview:focus-visible { outline: 1px solid #999; outline-offset: 3px; }
-.desktop-preview canvas, .desktop-dialog-view canvas { display: block; width: 100%; height: 100%; object-fit: contain; }
+.desktop-preview canvas, .desktop-dialog-view canvas { display: block; touch-action: none; }
 .desktop-controls { display: flex; justify-content: flex-end; gap: 6px; padding-top: 8px; }
 .desktop-control { min-height: 28px; padding: 5px 9px; font-size: 11px; }
 .desktop-dialog { width: min(1100px, 94vw); height: min(760px, 90vh); padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: #111; color: var(--text); }
@@ -18,3 +18,11 @@
 .desktop-preview { position: relative; }
 .desktop-preview-open { position:absolute; inset:0; width:100%; height:100%; border:0; background:transparent; cursor:zoom-in; z-index:2; }
 .desktop-dialog:fullscreen { width:100vw; height:100vh; max-width:none; max-height:none; border-radius:0; box-sizing:border-box; }
+
+.desktop-dialog[open] { display: flex; flex-direction: column; }
+.desktop-dialog-view { flex: 1; width: 100%; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.desktop-gesture-help { margin: 5px 0 0; color: var(--dim); font-size: 11px; }
+@media (pointer: coarse) {
+  .desktop-dialog { width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; border-radius: 0; padding: max(6px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left)); box-sizing: border-box; }
+  .desktop-dialog .desktop-control, .desktop-dialog .icon-button { min-height: 40px; min-width: 44px; }
+}

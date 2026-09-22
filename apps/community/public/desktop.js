@@ -1,3 +1,4 @@
+import { enterDesktopScreen, configureDesktopInput } from "/desktop-screen.js";
 let rfbModulePromise;
 
 const icon = (name) => {
@@ -106,11 +107,18 @@ export function createDesktopUI({ api, getRoomId, toast = () => {} }) {
   dialogHead.append(dialogTitle, dialogControl, dialogClose);
   const dialogView = document.createElement("div");
   dialogView.className = "desktop-dialog-view";
-  dialog.append(dialogHead, dialogView);
+  const dialogStatus = document.createElement("p");
+  dialogStatus.className = "desktop-status";
+  dialogStatus.setAttribute("role", "status");
+  const gestureHelp = document.createElement("p");
+  gestureHelp.className = "desktop-gesture-help";
+  gestureHelp.textContent = "한 손가락: 클릭·드래그 · 길게 누르기: 우클릭 · 두 손가락: 스크롤 · 벌리기/오므리기: 페이지 확대/축소";
+  dialog.append(dialogHead, dialogStatus, dialogView, gestureHelp);
   document.body.append(dialog);
 
   const setStatus = (message, kind = "") => {
     status.textContent = message || "";
+    dialogStatus.textContent = message || "";
     status.dataset.kind = kind;
   };
   const disconnect = () => {
@@ -122,6 +130,8 @@ export function createDesktopUI({ api, getRoomId, toast = () => {} }) {
   const hideDialog = () => {
     disconnect();
     if (dialog.open) dialog.close();
+    try { screen.orientation?.unlock?.(); } catch {}
+    if (document.fullscreenElement === dialog) document.exitFullscreen?.().catch(() => {});
     dialogView.replaceChildren();
   };
   const resetView = () => {
@@ -140,21 +150,18 @@ export function createDesktopUI({ api, getRoomId, toast = () => {} }) {
     setStatus("연결 중…");
     try {
       const ticket = await api(`/api/rooms/${encodeURIComponent(roomId)}/desktop/ticket`, { method: "POST", body: "{}" });
-      if (roomId !== state.roomId || generation !== state.generation) { state.connecting = false; return; }
+      if (roomId !== state.roomId || generation !== state.generation) { return; }
       const ticketUrl = new URL(ticket.websocketPath, window.location.href);
       const expectedPath = `/api/rooms/${encodeURIComponent(roomId)}/desktop/ws`;
       if (ticketUrl.origin !== window.location.origin || ticketUrl.pathname !== expectedPath || !ticketUrl.searchParams.has("ticket")) {
         throw new Error("데스크톱 연결 경로가 올바르지 않습니다.");
       }
       const RFB = await loadRFB();
-      if (roomId !== state.roomId || generation !== state.generation) { state.connecting = false; return; }
+      if (roomId !== state.roomId || generation !== state.generation) { return; }
       target.replaceChildren();
       const rfb = new RFB(target, websocketUrl(ticketUrl.pathname + ticketUrl.search), { shared: true });
-      rfb.viewOnly = viewOnly;
-      rfb.scaleViewport = true;
-      rfb.resizeSession = false;
-      rfb.focusOnClick = true;
-      rfb.addEventListener("connect", () => setStatus(viewOnly ? "미리보기 연결됨" : "제어 연결됨", "ready"));
+      configureDesktopInput(rfb, viewOnly);
+      rfb.addEventListener("connect", () => setStatus(rfb.viewOnly ? "미리보기 연결됨" : "제어 연결됨", "ready"));
       rfb.addEventListener("disconnect", () => {
         if (state.rfb === rfb) {
           state.rfb = null;
@@ -187,7 +194,7 @@ export function createDesktopUI({ api, getRoomId, toast = () => {} }) {
       toast(message);
     }
   };
-  const openDialog = async (viewOnly = true) => {
+  const openDialog = async (viewOnly = false, expand = false) => {
     if (!state.status?.configured || !state.status.available) return;
     hideDialog();
     dialogView.replaceChildren();
@@ -195,6 +202,17 @@ export function createDesktopUI({ api, getRoomId, toast = () => {} }) {
     state.viewOnly = viewOnly;
     dialogControl.disabled = false;
     dialogControl.textContent = viewOnly ? "제어하기" : "보기로 전환";
+    const generation = state.generation;
+    if (expand || matchMedia("(pointer: coarse)").matches) {
+      void enterDesktopScreen(dialog).then(result => {
+        if (!dialog.open || generation !== state.generation) {
+          try { screen.orientation?.unlock?.(); } catch {}
+          return;
+        }
+        gestureHelp.textContent = (!result.landscape && matchMedia("(orientation: portrait)").matches ? "휴대폰을 가로로 돌려주세요. " : "") +
+          "길게 누르기: 우클릭 · 두 손가락: 스크롤 · 벌리기/오므리기: 페이지 확대/축소";
+      });
+    }
     await connect(dialogView, viewOnly);
   };
   const refreshStatus = async () => {
@@ -239,38 +257,32 @@ export function createDesktopUI({ api, getRoomId, toast = () => {} }) {
     else if (!state.connecting) refreshStatus();
   };
   const togglePanel = () => {
+    if (matchMedia("(pointer: coarse)").matches && state.status?.available) { openDialog(false, true); return; }
     if (panel.hidden) openPanel();
     else { disconnect(); panel.hidden = true; button.setAttribute("aria-expanded", "false"); }
   };
   button.setAttribute("aria-expanded", "false");
   button.addEventListener("click", togglePanel);
   close.addEventListener("click", () => { disconnect(); panel.hidden = true; button.setAttribute("aria-expanded", "false"); });
-  previewCover.addEventListener("click", () => openDialog(true));
+  previewCover.addEventListener("click", () => openDialog(false));
   control.addEventListener("click", () => openDialog(false));
-  fullscreen.addEventListener("click", () => {
-    if (!state.status?.configured || !state.status.available) return;
-    hideDialog();
-    dialogView.replaceChildren();
-    dialog.showModal();
-    state.viewOnly = true;
-    dialogControl.disabled = false;
-    dialogControl.textContent = "제어하기";
-    dialog.requestFullscreen?.().catch(() => {});
-    connect(dialogView, true);
-  });
+  fullscreen.addEventListener("click", () => openDialog(false, true));
   dialogControl.addEventListener("click", () => {
     if (!state.rfb) return;
     state.viewOnly = !state.viewOnly;
     state.rfb.viewOnly = state.viewOnly;
+    setStatus(state.viewOnly ? "보기 모드" : "제어 연결됨", "ready");
     dialogControl.textContent = state.viewOnly ? "제어하기" : "보기로 전환";
   });
   dialogClose.addEventListener("click", hideDialog);
   dialog.addEventListener("cancel", hideDialog);
-  dialog.addEventListener("close", hideDialog);
+  // Do not handle close by closing again: an old queued close event can destroy
+  // a newly opened connection when switching from preview to control.
 
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) disconnect();
-    else if (!panel.hidden && state.roomId && !dialog.open) refreshStatus();
+    else if (dialog.open && state.roomId) openDialog(false);
+    else if (!panel.hidden && state.roomId) refreshStatus();
   });
 
   return {

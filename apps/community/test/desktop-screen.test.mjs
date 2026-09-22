@@ -1,0 +1,5 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {enterDesktopScreen,configureDesktopInput} from '../public/desktop-screen.js';
+test('control is writable by default and preserves native touch gestures',()=>{const rfb={viewOnly:true,dragViewport:true};configureDesktopInput(rfb);assert.equal(rfb.viewOnly,false);assert.equal(rfb.dragViewport,false);assert.equal(rfb.scaleViewport,true);configureDesktopInput(rfb,true);assert.equal(rfb.viewOnly,true);});
+test('landscape request follows fullscreen and unsupported browsers fall back',async()=>{const calls=[];assert.deepEqual(await enterDesktopScreen({async requestFullscreen(){calls.push('fullscreen');}},{async lock(mode){calls.push(mode);}}),{fullscreen:true,landscape:true});assert.deepEqual(calls,['fullscreen','landscape']);assert.deepEqual(await enterDesktopScreen({},{}),{fullscreen:false,landscape:false});assert.deepEqual(await enterDesktopScreen({async requestFullscreen(){throw Error();}},{async lock(){throw Error();}}),{fullscreen:false,landscape:false});});

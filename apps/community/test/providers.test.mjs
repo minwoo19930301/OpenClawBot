@@ -66,3 +66,10 @@ test("automatic rotation starts after a live list when no single model is select
   assert.deepEqual(picks.map((pick) => pick.model).sort(), ["groq-model", "route-model"]);
   assert.equal(new Set(picks.map((pick) => pick.apiKey)).size, 2);
 });
+
+test("chat catalog excludes audio and moderation models and keeps automatic choice stable", async () => {
+  const pool = createProviderPool({GROQ_API_KEY:"test-key"}, async () => modelsResponse(["whisper-large-v3", "canopylabs/orpheus-v1-english", "meta-llama/llama-prompt-guard-2-22m", "openai/gpt-oss-20b", "openai/gpt-oss-120b"]));
+  const listed = await pool.listModels();
+  assert.equal(listed.models.length, 2);
+  assert.equal(pool.choose("", "").model, "openai/gpt-oss-120b");
+});

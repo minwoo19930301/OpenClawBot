@@ -97,6 +97,7 @@ export function createProviderPool(env = {}, fetchImpl = fetch) {
         for (const row of rows) {
           const id = typeof row === "string" ? row : row?.id;
           if (typeof id !== "string" || !/^[\w.:/@+-]{1,200}$/.test(id)) continue;
+          if (/whisper|orpheus|prompt-guard|safeguard|embedding|(?:^|[\/.-])tts(?:[\/.-]|$)/i.test(id)) continue;
           ids.add(id);
           models.push({
             provider: provider.name,
@@ -129,7 +130,7 @@ export function createProviderPool(env = {}, fetchImpl = fetch) {
     const provider = providers[cursor % providers.length];
     cursor += 1;
     const listed = catalogs.get(provider.slot);
-    const model = env.COMMUNITY_LLM_MODEL || (listed?.size ? [...listed][0] : "");
+    const model = env.COMMUNITY_LLM_MODEL || ["openai/gpt-oss-120b", "openai/gpt-oss-20b"].find(id => listed?.has(id)) || (listed?.size ? [...listed].sort()[0] : "");
     if (!model) return null;
     return { model, apiKey: provider.apiKey, baseUrl: provider.baseUrl, effort: effortValue, provider: provider.name };
   }

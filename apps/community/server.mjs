@@ -501,6 +501,8 @@ export async function startCommunity(options = {}) {
           "/integrations.js": ["integrations.js", "text/javascript"],
           "/integrations.css": ["integrations.css", "text/css"],
           "/": ["index.html", "text/html"],
+          "/message-format.mjs": ["message-format.mjs", "text/javascript"],
+          "/model-picker.mjs": ["model-picker.mjs", "text/javascript"],
           "/app.js": ["app.js", "text/javascript"],
           "/pwa.js": ["pwa.js", "text/javascript"],
           "/sw.js": ["sw.js", "text/javascript"],

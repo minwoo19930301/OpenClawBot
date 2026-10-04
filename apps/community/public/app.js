@@ -1,4 +1,6 @@
 const MONITOR_ROOM = "00000000-0000-4000-8000-000000000001";
+import { renderMessageText } from "/message-format.mjs";
+import { recommendedModels, modelLabel, filterModels } from "/model-picker.mjs";
 import { createDesktopUI } from "/desktop.js";
 import { createPwaController } from "/pwa.js";
 
@@ -457,11 +459,13 @@ function renderRoom(data) {
     els.sendingStatus.classList.remove("is-visible");
   }
 }
+const animatedMessages = new Set();
 function createMessage(message) {
   const article = document.createElement("article");
   const own =
     message.kind === "human" && message.authorId === state.session?.user?.id;
   article.className = `message message-${message.kind}${own ? " message-own" : ""}`;
+  if(message.id && Date.now()-message.createdAt<15000 && !animatedMessages.has(message.id)){article.classList.add("message-enter");animatedMessages.add(message.id);if(animatedMessages.size>500)animatedMessages.delete(animatedMessages.values().next().value);}
   const avatar = document.createElement("div");
   avatar.className = `avatar ${message.kind === "bot" ? "avatar-bot" : ""}`;
   if (message.kind === "bot") avatar.append(icon("bot"));
@@ -482,8 +486,8 @@ function createMessage(message) {
   time.title = formatDate(message.createdAt);
   meta.append(author, time);
   if (message.text) {
-    const text = document.createElement("p");
-    text.textContent = message.text;
+    const text = message.kind === "bot" ? renderMessageText(message.text) : document.createElement("p");
+    if(message.kind !== "bot")text.textContent = message.text;
     body.append(text);
   }
   if (Array.isArray(message.attachments)) {
@@ -916,23 +920,53 @@ function saveRoomPreferences(id, prefs) {
 }
 function applyModels(models) {
   if (Array.isArray(models)) state.models = models;
+  const recommended = recommendedModels(state.models);
   for (const select of $$(".model-select")) {
     const chosen = select.dataset.chosen ?? select.value;
-    select.replaceChildren();
-    const auto = document.createElement("option");
-    auto.value = "";
-    auto.textContent = "자동 순환";
-    select.append(auto);
-    for (const model of state.models) {
-      const option = document.createElement("option");
-      option.value = model.value;
-      const providers = (model.providers || []).join(", ");
-      option.textContent = providers ? providers + " · " + model.id : model.id;
-      select.append(option);
+    select.replaceChildren(new Option("자동 선택 · 추천", ""));
+    const visible=[...recommended];
+    const current=state.models.find(model=>model.value===chosen);
+    if(current&&!visible.includes(current))visible.push(current);
+    for(const model of visible)select.append(new Option(modelLabel(model)+(model===current&&!recommended.includes(model)?" · 선택됨":""),model.value));
+    select.value=visible.some(model=>model.value===chosen)?chosen:"";
+    select.dataset.chosen=select.value;
+    select.title="추천 모델 · 자동 선택은 연결 상태에 따라 순환합니다";
+    if(!select._moreButton){
+      const more=document.createElement("button");more.type="button";more.className="model-more";more.textContent="더 보기";
+      more.setAttribute("aria-label","전체 모델 검색");more.setAttribute("aria-haspopup","dialog");
+      more.onclick=()=>openModelBrowser(select,more);
+      select.parentElement.after(more);select._moreButton=more;
     }
-    select.value = [...select.options].some((option) => option.value === chosen) ? chosen : "";
-    select.dataset.chosen = select.value;
+    select._moreButton.disabled=!state.models.length;
   }
+}
+let modelBrowser;
+function openModelBrowser(select,trigger) {
+  if(!modelBrowser){
+    modelBrowser=document.createElement("dialog");modelBrowser.className="model-browser";modelBrowser.setAttribute("aria-labelledby","model-browser-title");
+    modelBrowser.innerHTML='<header><div><span class="picker-eyebrow">MODEL LIBRARY</span><h2 id="model-browser-title">어떤 모델과 대화할까요?</h2></div><button type="button" class="model-browser-close" aria-label="모델 선택 닫기">×</button></header><input class="model-search" type="search" placeholder="모델 또는 공급자 검색" aria-label="모델 또는 공급자 검색"><p class="model-count" role="status"></p><div class="model-results"></div><button class="model-load-more" type="button">더 불러오기</button>';
+    document.body.append(modelBrowser);
+    $(".model-browser-close",modelBrowser).onclick=()=>modelBrowser.close();
+    modelBrowser.addEventListener("click",event=>{if(event.target===modelBrowser){const r=modelBrowser.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)modelBrowser.close();}});
+  }
+  const search=$(".model-search",modelBrowser), results=$(".model-results",modelBrowser), load=$(".model-load-more",modelBrowser);
+  let count=60;
+  const recommended=new Set(recommendedModels(state.models).map(m=>m.value));
+  function render(){
+    const matching=filterModels(state.models,search.value);
+    results.replaceChildren();
+    $(".model-count",modelBrowser).textContent=matching.length?`${matching.length}개 모델 · ${Math.min(count,matching.length)}개 표시`:"일치하는 모델이 없어요. 다른 이름이나 공급자로 검색해 보세요.";
+    for(const model of matching.slice(0,count)){
+      const button=document.createElement("button");button.type="button";button.className="model-card";button.setAttribute("aria-pressed",String(select.value===model.value));
+      const name=document.createElement("strong"),detail=document.createElement("span"),badge=document.createElement("small");
+      name.textContent=modelLabel(model);detail.textContent=(model.providers||[]).join(" · ");badge.textContent=select.value===model.value?"선택됨":recommended.has(model.value)?"추천":model.id;
+      button.append(name,detail,badge);button.title=model.id;
+      button.onclick=()=>{if(select.isConnected){select.dataset.chosen=model.value;applyModels(state.models);select.dispatchEvent(new Event("change",{bubbles:true}));}modelBrowser.close();};results.append(button);
+    }
+    load.hidden=count>=matching.length;
+  }
+  search.value="";search.oninput=()=>{count=60;render();};load.onclick=()=>{count+=60;render();};modelBrowser.onclose=()=>{if(trigger.isConnected)trigger.focus();};
+  render();modelBrowser.showModal();search.focus();
 }
 function setLayout(count) {
   if (!state.selectedRoom || count < 2 || count > 8) return;

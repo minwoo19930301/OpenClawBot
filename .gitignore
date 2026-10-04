@@ -13,3 +13,5 @@ dist/
 *.sqlite-shm
 *.sqlite-wal
 apps/community/public/vendor/
+
+__pycache__/

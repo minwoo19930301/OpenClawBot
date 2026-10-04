@@ -17,19 +17,45 @@ export class ApiLlm {
     }
     const effort=['low','medium','high','xhigh'].includes(request?.effort)?request.effort:'';
     const messages=[{role:'system',content:request.system},{role:'user',content:request.user}];
-    let actions=0;
+    const definitions=request.toolDefinitions || BROWSER_TOOL_DEFINITIONS;
+    let actions=0, candidateIndex=0;
     for(let step=0;step<5;step++) {
       if(step) await request.beforeAdditionalModelCall();
       const useTools=Boolean(request.browser) && actions<4 && step<4;
-      const response=await fetch(endpoint,{
-        method:'POST',redirect:'error',
-        signal:AbortSignal.any([AbortSignal.timeout(20000),...(signal?[signal]:[])]),
-        headers:{'content-type':'application/json',authorization:'Bearer '+key},
-        body:JSON.stringify({model,messages,max_completion_tokens:512,
-          ...(effort?{reasoning_effort:effort}:{}),
-          ...(useTools?{tools:BROWSER_TOOL_DEFINITIONS,tool_choice:'auto',parallel_tool_calls:false}:{})}),
-      });
-      if(!response.ok){await response.body?.cancel();throw new Error('Model provider rejected request');}
+      let response;
+      const candidates = request.attempts?.length ? request.attempts : [{apiKey:key, model, baseUrl:endpoint.href.replace(/\/chat\/completions$/, '')}];
+      const start=candidateIndex;
+      for (let attempt=start; attempt<Math.min(candidates.length, 8); attempt++) {
+        signal?.throwIfAborted();
+        if (attempt>start) await request.beforeAdditionalModelCall?.();
+        const candidate=candidates[attempt];
+        const target=new URL(candidate.baseUrl.replace(/\/+$/, '')+'/chat/completions');
+        if(target.protocol!=='https:' && !['localhost','127.0.0.1','[::1]'].includes(target.hostname)) throw new Error('Model endpoint must use HTTPS');
+        try {
+          response=await fetch(target,{
+            method:'POST',redirect:'error',
+            signal:AbortSignal.any([AbortSignal.timeout(12000),...(signal?[signal]:[])]),
+            headers:{'content-type':'application/json',authorization:'Bearer '+candidate.apiKey},
+            body:JSON.stringify({model:candidate.model,messages,max_tokens:512,
+              ...(effort && (!candidate.provider || /openai|groq/.test(candidate.provider)) ? {reasoning_effort:effort}:{}),
+              ...(useTools?{tools:definitions,tool_choice:'auto'}:{})}),
+          });
+        } catch(error) {
+          if(signal?.aborted) throw error;
+          if(error.name!=='TimeoutError' && !(error instanceof TypeError)) throw error;
+          request.onProviderFailure?.(candidate, 503);
+          if(attempt===Math.min(candidates.length,8)-1) throw new Error('모든 모델 연결에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+          continue;
+        }
+        if(response.ok) {candidateIndex=attempt;break;}
+        const status=response.status;
+        const raw=response.headers.get('retry-after');
+        const delay=raw ? (Number.isFinite(Number(raw)) ? Number(raw)*1000 : Date.parse(raw)-Date.now()) : 0;
+        await response.body?.cancel();
+        if(![401,402,403,408,429,500,502,503,504].includes(status)) throw new Error('Model provider rejected request ('+status+')');
+        request.onProviderFailure?.(candidate,status,delay);
+        if(attempt===Math.min(candidates.length,8)-1) throw new Error('사용 가능한 모델 한도 또는 인증을 확인해 주세요.');
+      }
       const reader=response.body.getReader(),chunks=[];let bytes=0;
       try {for(;;){const result=await reader.read();if(result.done)break;bytes+=result.value.byteLength;if(bytes>131072)throw new Error('Model response too large');chunks.push(Buffer.from(result.value));}}
       finally {await reader.cancel().catch(()=>{});}
@@ -37,7 +63,7 @@ export class ApiLlm {
       if(useTools && message?.tool_calls?.length) {
         const calls=message.tool_calls;
         if(!Array.isArray(calls)||calls.length>4-actions)throw new Error('Browser action budget exceeded');
-        const allowed=new Set(BROWSER_TOOL_DEFINITIONS.map(t=>t.function.name));
+        const allowed=new Set(definitions.map(t=>t.function.name));
         for(const call of calls) if(typeof call.id!=='string'||call.id.length>200||!allowed.has(call.function?.name)||typeof call.function.arguments!=='string'||call.function.arguments.length>10000)throw new Error('Invalid browser tool call');
         messages.push({role:'assistant',content:typeof message.content==='string'?message.content.slice(0,4000):null,tool_calls:calls});
         for(const call of calls) {

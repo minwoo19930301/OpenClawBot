@@ -1,6 +1,9 @@
 export const EFFORTS = ["low", "medium", "high", "xhigh"];
 
 const KNOWN = [
+  ["huggingface", "https://router.huggingface.co/v1", "HUGGINGFACE_TOKEN"],
+  ["nvidia", "https://integrate.api.nvidia.com/v1", "NVIDIA_NIM_API_KEY"],
+  ["cohere", "https://api.cohere.ai/compatibility/v1", "COHERE_API_KEY"],
   ["groq", "https://api.groq.com/openai/v1", "GROQ_API_KEY"],
   ["openrouter", "https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"],
   ["openai", "https://api.openai.com/v1", "OPENAI_API_KEY"],
@@ -46,10 +49,10 @@ export function readProviders(env) {
     add("community", env.COMMUNITY_LLM_BASE_URL, env.COMMUNITY_LLM_API_KEY);
   }
   for (const [name, baseUrl, key] of KNOWN) {
-    const prefix = key.slice(0, -"_API_KEY".length);
+    const prefix = key.replace(/_(?:API_KEY|TOKEN)$/, "");
     if (env[key]) add(name, env[prefix + "_BASE_URL"] || baseUrl, env[key]);
     for (const envKey of Object.keys(env)) {
-      const match = envKey.match(new RegExp("^" + prefix + "_API_KEY_(\\d+)$"));
+      const match = envKey.match(new RegExp("^" + key + "_(\\d+)$"));
       if (!match || !env[envKey]) continue;
       add(name, env[prefix + "_BASE_URL_" + match[1]] || baseUrl, env[envKey]);
     }
@@ -75,13 +78,17 @@ export function createProviderPool(env = {}, fetchImpl = fetch) {
   const providers = readProviders(env);
   const catalogs = new Map();
   let cursor = 0;
+  const cooldowns = new Map();
+  let lastListed = 0;
+  let pending;
 
   async function listModels(signal) {
     const models = [];
+    catalogs.clear();
     const failures = [];
     await Promise.all(providers.map(async (provider) => {
       try {
-        const response = await fetchImpl(provider.baseUrl + "/models", {
+        const response = await fetchImpl((provider.name === "cohere" ? "https://api.cohere.com/v1/models?endpoint=chat&page_size=1000" : provider.baseUrl + "/models"), {
           redirect: "error",
           signal: AbortSignal.any([AbortSignal.timeout(8000), ...(signal ? [signal] : [])]),
           headers: { accept: "application/json", authorization: "Bearer " + provider.apiKey },
@@ -95,9 +102,10 @@ export function createProviderPool(env = {}, fetchImpl = fetch) {
         const rows = Array.isArray(data?.data) ? data.data : Array.isArray(data?.models) ? data.models : [];
         const ids = new Set();
         for (const row of rows) {
-          const id = typeof row === "string" ? row : row?.id;
+          let id = typeof row === "string" ? row : row?.id || row?.name;
+          if(provider.name === "gemini" && typeof id === "string") id=id.replace(/^models\//, "");
           if (typeof id !== "string" || !/^[\w.:/@+-]{1,200}$/.test(id)) continue;
-          if (/whisper|orpheus|prompt-guard|safeguard|embedding|(?:^|[\/.-])tts(?:[\/.-]|$)/i.test(id)) continue;
+          if (/whisper|orpheus|prompt-guard|safeguard|embedding|embed-|rerank|native-audio|live-preview|image|vision|(?:^|[\/.-])tts(?:[\/.-]|$)/i.test(id)) continue;
           ids.add(id);
           models.push({
             provider: provider.name,
@@ -111,31 +119,42 @@ export function createProviderPool(env = {}, fetchImpl = fetch) {
         failures.push({ provider: provider.name, slot: provider.slot, error: "목록을 가져오지 못했습니다." });
       }
     }));
+    lastListed = Date.now();
     return { models, failures };
   }
 
-  function choose(modelId, effort) {
-    const effortValue = EFFORTS.includes(effort) ? effort : "";
-    const selected = typeof modelId === "string" && /^[\w.:/@+-]{1,200}$/.test(modelId) ? modelId : "";
-    if (!providers.length) return null;
-    if (selected) {
-      const owning = providers.filter((provider) => catalogs.get(provider.slot)?.has(selected));
-      if (!owning.length) return null;
-      const provider = owning[cursor % owning.length];
-      cursor += 1;
-      return { model: selected, apiKey: provider.apiKey, baseUrl: provider.baseUrl, effort: effortValue, provider: provider.name };
-    }
-    if (!effortValue && !env.COMMUNITY_LLM_MODEL && catalogs.size === 0) return null;
-    if (!env.COMMUNITY_LLM_MODEL && catalogs.size === 0) return null;
-    const provider = providers[cursor % providers.length];
-    cursor += 1;
-    const listed = catalogs.get(provider.slot);
-    const model = env.COMMUNITY_LLM_MODEL || ["openai/gpt-oss-120b", "openai/gpt-oss-20b"].find(id => listed?.has(id)) || (listed?.size ? [...listed].sort()[0] : "");
-    if (!model) return null;
-    return { model, apiKey: provider.apiKey, baseUrl: provider.baseUrl, effort: effortValue, provider: provider.name };
+  async function ensureModels() {
+    if (Date.now() - lastListed < 300000) return;
+    pending ??= listModels().finally(() => { pending = null; });
+    await pending;
   }
-
-  return { providers, listModels, choose, get configured() { return providers.length > 0; } };
+  function choose(modelId, effort) {
+    const selected = typeof modelId === "string" && /^[\w.:/@+-]{1,200}$/.test(modelId) ? modelId : "";
+    const candidates = providers.flatMap(provider => {
+      if ((cooldowns.get(provider.slot) || 0) > Date.now()) return [];
+      const listed = catalogs.get(provider.slot);
+      const configured = env[provider.name.toUpperCase() + "_MODEL"] || env.COMMUNITY_LLM_MODEL;
+      let ids = [...(listed || [])];
+      // OpenRouter auto mode never silently selects a paid model.
+      if (!selected && provider.name === "openrouter") ids = ids.filter(id => id.endsWith(":free") || id === "openrouter/free");
+      const model = selected ? (listed?.has(selected) ? selected : "") :
+        (ids.includes(configured) ? configured : ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "gemini-2.5-flash", "command-a-03-2025"].find(id => ids.includes(id)) || ids.sort()[0]);
+      return model ? [{...provider, model, effort: EFFORTS.includes(effort) ? effort : "", provider: provider.name}] : [];
+    });
+    if (!candidates.length) return null;
+    const start = cursor++ % candidates.length;
+    const ordered = [...candidates.slice(start), ...candidates.slice(0, start)];
+    // Try one key per provider first; repeated keys must not consume the entire turn.
+    const first = [], rest = [], seen = new Set();
+    for (const candidate of ordered) { (seen.has(candidate.provider) ? rest : first).push(candidate); seen.add(candidate.provider); }
+    const attempts = [...first, ...rest];
+    const choice = attempts[0];
+    return {...choice, attempts, onProviderFailure: (candidate, status, retryAfter) => {
+      const duration = status === 401 || status === 403 ? 3600000 : Math.max(30000, Math.min(3600000, retryAfter || 60000));
+      cooldowns.set(candidate.slot, Date.now() + duration);
+    }};
+  }
+  return { providers, listModels, ensureModels, choose, get configured() { return providers.length > 0; } };
 }
 
 export function publicModels(listed) {

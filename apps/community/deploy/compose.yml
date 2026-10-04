@@ -18,6 +18,8 @@ services:
     env_file:
       - .env.production
       - .env.openclaw
+      - path: .env.providers
+        required: false
     environment:
       COMMUNITY_PROVISIONER_SOCKET: /run/community-provisioner/control.sock
       COMMUNITY_MONITOR_PATH: /run/community-monitor/status.json

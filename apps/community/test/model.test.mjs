@@ -59,3 +59,23 @@ test("plain requests omit browser tools and preserve a plain text response", asy
   });
   assert.deepEqual(JSON.parse(result.slice("SendMessage: ".length)), { type: "text", content: "plain response" });
 });
+
+test('429 fails over before executing tools, extra calls are charged, cancellation never retries',async()=>{
+ const old=globalThis.fetch;let calls=0,charged=0,failed=0;
+ const llm=new ApiLlm({COMMUNITY_LLM_MODEL:'a',COMMUNITY_LLM_BASE_URL:'https://one.test',COMMUNITY_LLM_API_KEY:'first'});
+ const request={system:'test',user:'test',attempts:[{model:'a',baseUrl:'https://one.test',apiKey:'first'},{model:'b',baseUrl:'https://two.test',apiKey:'second'}],beforeAdditionalModelCall:async()=>{charged++;},onProviderFailure:()=>{failed++;}};
+ try{
+  globalThis.fetch=async()=>++calls===1?new Response('',{status:429,headers:{'retry-after':'60'}}):Response.json({choices:[{message:{content:'success'}}]});
+  await llm.complete(request);assert.equal(calls,2);assert.equal(charged,1);assert.equal(failed,1);
+  const controller=new AbortController();controller.abort();calls=0;
+  await assert.rejects(llm.complete(request,controller.signal));assert.equal(calls,0);
+ }finally{globalThis.fetch=old;}
+});
+
+test('private service tools use only supplied definitions and never replay completed reads on failover',async()=>{
+ const original=globalThis.fetch;let count=0,reads=0;const keys=[];
+ try{globalThis.fetch=async(_url,opts)=>{keys.push(opts.headers.authorization);const n=++count;if(n===1||n===3)return new Response('',{status:429});return response({choices:[{message:n===2?{tool_calls:[call('read_connected_service','{"id":"meta","action":"profile"}')]}:{content:'done'}}]});};
+ const result=await llm().complete(request({attempts:[{model:'a',baseUrl:'https://a.test',apiKey:'a'},{model:'b',baseUrl:'https://b.test',apiKey:'b'},{model:'c',baseUrl:'https://c.test',apiKey:'c'}],toolDefinitions:[{type:'function',function:{name:'read_connected_service'}}],browser:async()=>{reads++;return 'profile';}}));
+ assert.match(result,/done/);assert.equal(reads,1);assert.deepEqual(keys,['Bearer a','Bearer b','Bearer b','Bearer c']);
+ }finally{globalThis.fetch=original;}
+});

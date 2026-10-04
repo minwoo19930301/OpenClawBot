@@ -210,6 +210,7 @@ async function enterWorkspace() {
   $("#profile-avatar").textContent = initials(
     user.displayName || user.username,
   );
+  $("#integrations-link").classList.toggle("is-hidden", user.role !== "admin");
   $("#site-invite-button").classList.toggle("is-hidden", user.role !== "admin");
   const model = state.session.model || {};
   els.demoBadge.classList.toggle("is-hidden", !model.demo);

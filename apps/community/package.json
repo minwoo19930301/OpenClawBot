@@ -14,6 +14,7 @@
     "@open-grokbot/llm": "0.1.0",
     "@open-grokbot/runner": "0.1.0",
     "busboy": "1.6.0",
+    "imapflow": "2.2.5",
     "playwright-core": "1.63.0",
     "web-push": "3.6.7",
     "ws": "8.21.3"

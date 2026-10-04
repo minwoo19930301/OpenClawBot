@@ -59,11 +59,11 @@ test("automatic rotation starts after a live list when no single model is select
   const pool = createProviderPool({
     GROQ_API_KEY: "secret-one",
     OPENROUTER_API_KEY: "secret-two",
-  }, async (url) => modelsResponse(url.includes("groq") ? ["groq-model"] : ["route-model"]));
+  }, async (url) => modelsResponse(url.includes("groq") ? ["groq-model"] : ["route-model:free"]));
   assert.equal(pool.choose("", ""), null);
   await pool.listModels();
   const picks = [pool.choose("", ""), pool.choose("", "")];
-  assert.deepEqual(picks.map((pick) => pick.model).sort(), ["groq-model", "route-model"]);
+  assert.deepEqual(picks.map((pick) => pick.model).sort(), ["groq-model", "route-model:free"]);
   assert.equal(new Set(picks.map((pick) => pick.apiKey)).size, 2);
 });
 
@@ -72,4 +72,13 @@ test("chat catalog excludes audio and moderation models and keeps automatic choi
   const listed = await pool.listModels();
   assert.equal(listed.models.length, 2);
   assert.equal(pool.choose("", "").model, "openai/gpt-oss-120b");
+});
+
+test('HF token aliases and provider failover exclude cooled keys and paid auto routes', async()=>{
+ const pool=createProviderPool({HUGGINGFACE_TOKEN_2:'hf',GROQ_API_KEY:'g',OPENROUTER_API_KEY:'o'}, async url=>modelsResponse(url.includes('openrouter')?['paid-model','free-model:free']:['chat-model']));
+ await pool.listModels(); const choice=pool.choose('','');
+ assert.equal(choice.attempts.length,3);assert.equal(choice.attempts.some(p=>p.model==='paid-model'),false);
+ choice.onProviderFailure(choice.attempts[0],429,90000);
+ assert.equal(pool.choose('','').attempts.some(p=>p.slot===choice.slot),false);
+ assert.equal(pool.choose('paid-model','').provider,'openrouter');
 });

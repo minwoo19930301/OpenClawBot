@@ -52,7 +52,7 @@ export class ApiLlm {
         const raw=response.headers.get('retry-after');
         const delay=raw ? (Number.isFinite(Number(raw)) ? Number(raw)*1000 : Date.parse(raw)-Date.now()) : 0;
         await response.body?.cancel();
-        if(![401,402,403,408,429,500,502,503,504].includes(status)) throw new Error('Model provider rejected request ('+status+')');
+        if(![401,402,403,404,408,429,500,502,503,504].includes(status)) throw new Error('Model provider rejected request ('+status+')');
         request.onProviderFailure?.(candidate,status,delay);
         if(attempt===Math.min(candidates.length,8)-1) throw new Error('사용 가능한 모델 한도 또는 인증을 확인해 주세요.');
       }

@@ -138,7 +138,7 @@ export function createProviderPool(env = {}, fetchImpl = fetch) {
       // OpenRouter auto mode never silently selects a paid model.
       if (!selected && provider.name === "openrouter") ids = ids.filter(id => id.endsWith(":free") || id === "openrouter/free");
       const model = selected ? (listed?.has(selected) ? selected : "") :
-        (ids.includes(configured) ? configured : ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "gemini-2.5-flash", "command-a-03-2025"].find(id => ids.includes(id)) || ids.sort()[0]);
+        (ids.includes(configured) ? configured : ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "gemini-3.8-flash", "gemini-3.5-flash", "gemini-2.5-flash", "command-a-03-2025"].find(id => ids.includes(id)) || ids.sort()[0]);
       return model ? [{...provider, model, effort: EFFORTS.includes(effort) ? effort : "", provider: provider.name}] : [];
     });
     if (!candidates.length) return null;

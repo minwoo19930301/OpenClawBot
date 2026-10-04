@@ -1150,6 +1150,7 @@ async function refreshExtra(index) {
   try {
     const data = await api(`/api/rooms/${encodeURIComponent(roomId)}`);
     if (state.extra[index] !== pane || pane.roomId !== roomId || pane.request !== request) return;
+    if(JSON.stringify(pane.data) === JSON.stringify(data))return;
     pane.data = data;
     const section = $$(".extra-pane")[index];
     if (!section) return;

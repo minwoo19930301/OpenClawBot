@@ -286,7 +286,7 @@ function renderRooms() {
   visibleRooms.forEach((room) => {
     const button = document.createElement("button");
     button.dataset.dockRoom = room.id;
-    button.draggable = true;
+    button.draggable = false;
     button.type = "button";
     const openIds = new Set([state.selectedRoom, ...state.extra.map((pane) => pane.roomId)]);
     button.className = `room-item ${openIds.has(room.id) ? "is-active" : ""}`;
@@ -1318,7 +1318,7 @@ function applyDockLayout() {
     if (rect && dockRects.length > 1) Object.assign(panel.style, {left:rect.x*100+"%", top:rect.y*100+"%", width:rect.w*100+"%", height:rect.h*100+"%", gridColumn:""});
     else for (const key of ["left","top","width","height"]) panel.style[key] = "";
     const handle = index ? panel.querySelector(".pane-bar") : $(".header-identity");
-    if (handle) { handle.draggable = true; handle.dataset.dockIndex = index; handle.title = "드래그해서 이동 · 우클릭으로 분할"; }
+    if (handle) { handle.draggable = false; handle.dataset.dockIndex = index; handle.title = "드래그해서 이동 · 우클릭으로 분할"; }
   });
 }
 function dockRoomAt(index) { return index === 0 ? state.selectedRoom : state.extra[index-1]?.roomId; }
@@ -1366,6 +1366,32 @@ function setupDock() {
     Object.assign(preview.style,{left:x+"px",top:y+"px",width:w+"px",height:h+"px"});preview.hidden=false;
     return side;
   }
+  let pointerDock = null, suppressClick = false;
+  document.addEventListener("pointerdown", event => {
+    if (event.button !== 0 || pendingDock?.placing || event.target.closest("select,input,textarea")) return;
+    const room = event.target.closest("[data-dock-room]"), handle = event.target.closest(".pane-bar[data-dock-index],.header-identity[data-dock-index]");
+    if (!room && (!handle || event.target.closest("button"))) return;
+    pointerDock = {x:event.clientX,y:event.clientY,source:room ? {roomId:room.dataset.dockRoom} : {index:Number(handle.dataset.dockIndex)}};
+  });
+  document.addEventListener("pointermove", event => {
+    if (!pointerDock) return;
+    if (!pointerDock.active && Math.hypot(event.clientX-pointerDock.x,event.clientY-pointerDock.y)<7) return;
+    pointerDock.active=true;pendingDock=pointerDock.source;
+    event.preventDefault();
+    const panel=document.elementFromPoint(event.clientX,event.clientY)?.closest("#pane-grid > .room-view");
+    if(panel) previewAt(panel,event); else preview.hidden=true;
+  });
+  document.addEventListener("pointerup", event => {
+    if (!pointerDock) return;
+    if(pointerDock.active){
+      const panel=document.elementFromPoint(event.clientX,event.clientY)?.closest("#pane-grid > .room-view");
+      if(panel) placeDock(Number(panel.dataset.dockIndex),dockZone(panel,event));
+      pendingDock=null;hide();suppressClick=true;setTimeout(()=>{suppressClick=false;},0);
+    }
+    pointerDock=null;
+  });
+  document.addEventListener("click", event=>{if(suppressClick){event.preventDefault();event.stopImmediatePropagation();}},true);
+  document.addEventListener("pointercancel",()=>{pointerDock=null;pendingDock=null;hide();});
   document.addEventListener("dragstart",event=>{
     const room=event.target.closest("[data-dock-room]"), handle=event.target.closest("[draggable=true][data-dock-index]");
     if(room) pendingDock={roomId:room.dataset.dockRoom};

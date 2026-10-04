@@ -2,6 +2,8 @@ const MONITOR_ROOM = "00000000-0000-4000-8000-000000000001";
 import { createDesktopUI } from "/desktop.js";
 import { createPwaController } from "/pwa.js";
 
+let dockRects = [{x:0,y:0,w:1,h:1}];
+let pendingDock = null;
 const state = {
   session: null,
   rooms: [],
@@ -170,6 +172,8 @@ function showAuth() {
   state.extra = [];
   state.focusPane = 0;
   state.models = [];
+  dockRects = [{x:0,y:0,w:1,h:1}];
+  pendingDock = null;
   const paneGrid = $("#pane-grid");
   if (paneGrid) {
     paneGrid.dataset.panes = "1";
@@ -281,6 +285,8 @@ function renderRooms() {
   }
   visibleRooms.forEach((room) => {
     const button = document.createElement("button");
+    button.dataset.dockRoom = room.id;
+    button.draggable = true;
     button.type = "button";
     const openIds = new Set([state.selectedRoom, ...state.extra.map((pane) => pane.roomId)]);
     button.className = `room-item ${openIds.has(room.id) ? "is-active" : ""}`;
@@ -934,6 +940,7 @@ function setLayout(count) {
     state.extra = [];
     state.focusPane = 0;
     $("#pane-grid").dataset.panes = "1";
+    $("#pane-grid").classList.remove("docked");
     $("#room-view").style.gridColumn = "";
     $("#room-view").classList.remove("is-focus");
     $$(".extra-pane").forEach((pane) => pane.remove());
@@ -1034,6 +1041,7 @@ function renderExtraPanes() {
     grid.append(section);
   });
   applyModels(state.models);
+  applyDockLayout();
 }
 function modelSelect(pane) {
   const label = document.createElement("label");
@@ -1269,9 +1277,16 @@ function bind() {
     }
   });
   $("#mobile-menu").addEventListener("click", () => {
-    $("#sidebar").classList.add("is-open");
-    $("#sidebar-scrim").classList.add("is-visible");
+    if (matchMedia("(max-width: 720px)").matches) {
+      const open = $("#sidebar").classList.toggle("is-open");
+      $("#sidebar-scrim").classList.toggle("is-visible", open);
+      $("#mobile-menu").setAttribute("aria-expanded", String(open));
+    } else {
+      const hidden = els.workspace.classList.toggle("sidebar-collapsed");
+      $("#mobile-menu").setAttribute("aria-expanded", String(!hidden));
+    }
   });
+  setupDock();
   $("#mobile-close").addEventListener("click", closeSidebar);
   $("#sidebar-scrim").addEventListener("click", closeSidebar);
   $$(".modal-close, .modal-cancel").forEach((button) =>
@@ -1290,3 +1305,91 @@ bind();
 pwaUI = createPwaController({ api, getSession: () => state.session, toast });
 desktopUI = createDesktopUI({ api, getRoomId: () => state.selectedRoom, toast });
 loadSession();
+
+
+// Docking changes only the arrangement; room identity and permissions stay unchanged.
+function dockPanels() { return [$("#room-view"), ...$$(".extra-pane")]; }
+function applyDockLayout() {
+  const grid = $("#pane-grid");
+  grid.classList.toggle("docked", dockRects.length > 1);
+  dockPanels().forEach((panel, index) => {
+    panel.dataset.dockIndex = index;
+    const rect = dockRects[index];
+    if (rect && dockRects.length > 1) Object.assign(panel.style, {left:rect.x*100+"%", top:rect.y*100+"%", width:rect.w*100+"%", height:rect.h*100+"%", gridColumn:""});
+    else for (const key of ["left","top","width","height"]) panel.style[key] = "";
+    const handle = index ? panel.querySelector(".pane-bar") : $(".header-identity");
+    if (handle) { handle.draggable = true; handle.dataset.dockIndex = index; handle.title = "드래그해서 이동 · 우클릭으로 분할"; }
+  });
+}
+function dockRoomAt(index) { return index === 0 ? state.selectedRoom : state.extra[index-1]?.roomId; }
+function dockZone(panel, event) {
+  const r=panel.getBoundingClientRect(), x=(event.clientX-r.left)/r.width, y=(event.clientY-r.top)/r.height;
+  const distances=[x,1-x,y,1-y], side=["left","right","top","bottom"][distances.indexOf(Math.min(...distances))];
+  return Math.min(...distances) > .3 && pendingDock?.index !== undefined ? "center" : side;
+}
+function placeDock(index, side) {
+  if (!pendingDock || !state.selectedRoom) return;
+  const source = pendingDock; pendingDock = null;
+  if (source.index !== undefined) {
+    if (source.index === index) return;
+    // Move existing panes without restarting their sessions.
+    [dockRects[source.index],dockRects[index]]=[dockRects[index],dockRects[source.index]];
+    applyDockLayout(); return;
+  }
+  if (dockRects.length >= 8) { toast("분할 화면은 최대 8개입니다."); return; }
+  const r = dockRects[index], next={...r};
+  if (side === "left" || side === "right") {
+    next.w=r.w/2; r.w/=2;
+    if (side === "left") r.x+=r.w; else next.x+=r.w;
+  } else {
+    next.h=r.h/2; r.h/=2;
+    if (side === "top") r.y+=r.h; else next.y+=r.h;
+  }
+  dockRects.push(next);
+  state.extra.push({roomId:source.roomId, data:null,busy:false,request:0,...roomPreferences(source.roomId)});
+  state.layout=dockRects.length;
+  $("#pane-grid").dataset.panes=String(state.layout);
+  renderExtraPanes(); renderRooms(); refreshExtras(); applyDockLayout();
+}
+function setupDock() {
+  const grid=$("#pane-grid"), preview=document.createElement("div"), menu=document.createElement("div");
+  preview.className="dock-preview"; preview.hidden=true; preview.textContent="여기에 놓기"; document.body.append(preview);
+  menu.className="dock-menu"; menu.hidden=true; menu.setAttribute("role","menu"); document.body.append(menu);
+  const hide=()=>{preview.hidden=true; menu.hidden=true;};
+  function previewAt(panel,event) {
+    const side=dockZone(panel,event), r=panel.getBoundingClientRect();
+    let x=r.left,y=r.top,w=r.width,h=r.height;
+    if (pendingDock?.index === undefined) {
+      if(side==="left"||side==="right"){w/=2;if(side==="right")x+=w;}
+      else {h/=2;if(side==="bottom")y+=h;}
+    }
+    Object.assign(preview.style,{left:x+"px",top:y+"px",width:w+"px",height:h+"px"});preview.hidden=false;
+    return side;
+  }
+  document.addEventListener("dragstart",event=>{
+    const room=event.target.closest("[data-dock-room]"), handle=event.target.closest("[draggable=true][data-dock-index]");
+    if(room) pendingDock={roomId:room.dataset.dockRoom};
+    else if(handle) pendingDock={index:Number(handle.dataset.dockIndex)};
+    else return;
+    event.dataTransfer.setData("text/plain","openclaw-pane"); event.dataTransfer.effectAllowed="move";
+  });
+  grid.addEventListener("dragover",event=>{const panel=event.target.closest("[data-dock-index]");if(!panel||!pendingDock)return;event.preventDefault();previewAt(panel,event);});
+  grid.addEventListener("drop",event=>{const panel=event.target.closest("[data-dock-index]");if(!panel||!pendingDock)return;event.preventDefault();placeDock(Number(panel.dataset.dockIndex),dockZone(panel,event));hide();});
+  document.addEventListener("dragend",()=>{pendingDock=null;hide();});
+  grid.addEventListener("pointermove",event=>{const panel=event.target.closest("[data-dock-index]");if(pendingDock?.placing&&panel)previewAt(panel,event);});
+  grid.addEventListener("click",event=>{const panel=event.target.closest("[data-dock-index]");if(pendingDock?.placing&&panel){event.preventDefault();event.stopImmediatePropagation();placeDock(Number(panel.dataset.dockIndex),dockZone(panel,event));hide();}},true);
+  const begin=roomId=>{pendingDock={roomId,placing:true};menu.hidden=true;toast("놓을 위치를 가리킨 뒤 클릭하세요. Esc로 취소합니다.");};
+  document.addEventListener("contextmenu",event=>{
+    const room=event.target.closest("[data-dock-room]"), panel=event.target.closest("[data-dock-index]");
+    if(!room&&!panel)return;if(event.target.closest("textarea,input"))return;
+    event.preventDefault();menu.replaceChildren();
+    const action=document.createElement("button");action.type="button";action.setAttribute("role","menuitem");action.textContent="Split view로 열기";
+    action.onclick=()=>begin(room?.dataset.dockRoom || dockRoomAt(Number(panel.dataset.dockIndex)));menu.append(action);
+    const reset=document.createElement("button");reset.type="button";reset.setAttribute("role","menuitem");reset.textContent="분할 닫기";reset.onclick=()=>{state.layout=2;setLayout(2);dockRects=[{x:0,y:0,w:1,h:1}];applyDockLayout();hide();};menu.append(reset);
+    Object.assign(menu.style,{left:Math.min(event.clientX,innerWidth-200)+"px",top:Math.min(event.clientY,innerHeight-100)+"px"});menu.hidden=false;action.focus();
+  });
+  document.addEventListener("pointerdown",event=>{if(!menu.contains(event.target))menu.hidden=true;});
+  document.addEventListener("keydown",event=>{if(event.key==="Escape"){pendingDock=null;hide();}});
+  $("#split-add").addEventListener("click",()=>begin(state.selectedRoom));
+  applyDockLayout();
+}

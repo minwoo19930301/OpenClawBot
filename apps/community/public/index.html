@@ -228,9 +228,9 @@
           <header class="topbar">
             <button
               id="mobile-menu"
-              class="icon-button mobile-only"
+              class="icon-button"
               type="button"
-              aria-label="메뉴 열기"
+              aria-label="사이드바 접기/펼치기" aria-expanded="true"
             >
               <svg class="icon"><use href="#i-menu" /></svg>
             </button>
@@ -244,15 +244,7 @@
             <span id="mobile-room-title" class="sr-only"></span
             ><span id="room-kicker" class="sr-only"></span>
             <div class="topbar-actions">
-              <div class="split-picker" role="group" aria-label="나누기 칸 수">
-                <button type="button" data-split="2" aria-label="2칸">2</button>
-                <button type="button" data-split="3" aria-label="3칸">3</button>
-                <button type="button" data-split="4" aria-label="4칸">4</button>
-                <button type="button" data-split="5" aria-label="5칸">5</button>
-                <button type="button" data-split="6" aria-label="6칸">6</button>
-                <button type="button" data-split="7" aria-label="7칸">7</button>
-                <button type="button" data-split="8" aria-label="8칸">8</button>
-              </div>
+              <button id="split-add" type="button" class="text-button" title="대화를 우클릭하거나 드래그해서 배치">분할 보기</button>
               <span
                 id="demo-badge"
                 class="demo-badge is-hidden"

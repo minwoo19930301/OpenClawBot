@@ -244,6 +244,15 @@
             <span id="mobile-room-title" class="sr-only"></span
             ><span id="room-kicker" class="sr-only"></span>
             <div class="topbar-actions">
+              <div class="split-picker" role="group" aria-label="나누기 칸 수">
+                <button type="button" data-split="2" aria-label="2칸">2</button>
+                <button type="button" data-split="3" aria-label="3칸">3</button>
+                <button type="button" data-split="4" aria-label="4칸">4</button>
+                <button type="button" data-split="5" aria-label="5칸">5</button>
+                <button type="button" data-split="6" aria-label="6칸">6</button>
+                <button type="button" data-split="7" aria-label="7칸">7</button>
+                <button type="button" data-split="8" aria-label="8칸">8</button>
+              </div>
               <span
                 id="demo-badge"
                 class="demo-badge is-hidden"
@@ -271,6 +280,7 @@
               </button>
             </div>
           </header>
+          <div id="pane-grid" class="pane-grid" data-panes="1">
           <section id="empty-state" class="empty-state">
             <h2>새 대화</h2>
             <p>대화를 만들거나 초대 코드로 참여하세요.</p>
@@ -308,6 +318,22 @@
                 aria-live="polite"
               ></div>
               <form id="composer-form" class="composer">
+                <div class="model-controls">
+                  <label>모델
+                    <select id="model-select" class="model-select" aria-label="모델">
+                      <option value="">자동 순환</option>
+                    </select>
+                  </label>
+                  <label>effort
+                    <select id="effort-select" class="effort-select" aria-label="effort">
+                      <option value="">기본</option>
+                      <option value="low">low</option>
+                      <option value="medium">medium</option>
+                      <option value="high">high</option>
+                      <option value="xhigh">xhigh</option>
+                    </select>
+                  </label>
+                </div>
                 <div
                   id="bot-picker"
                   class="bot-picker is-hidden"
@@ -338,7 +364,7 @@
                     id="message-input"
                     rows="1"
                     maxlength="4000"
-                    placeholder="메시지 보내기"
+                    placeholder="메시지. model 이면 목록을 가져옵니다."
                   ></textarea
                   ><button
                     id="record-button"
@@ -367,6 +393,7 @@
               </div>
             </div>
           </section>
+          </div>
         </main>
         <aside id="member-panel" class="member-panel" aria-label="대화 참여자">
           <div class="member-panel-head">

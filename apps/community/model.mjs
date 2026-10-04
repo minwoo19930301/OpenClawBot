@@ -8,16 +8,25 @@ export class ApiLlm {
     this.key=env.COMMUNITY_LLM_API_KEY;
   }
   async complete(request, signal) {
+    const key=request?.apiKey||this.key;
+    const model=request?.model||this.name;
+    let endpoint=this.endpoint;
+    if(request?.baseUrl){
+      endpoint=new URL(String(request.baseUrl).replace(/\/+$/,'')+'/chat/completions');
+      if(endpoint.protocol!=='https:' && !['localhost','127.0.0.1','[::1]'].includes(endpoint.hostname)) throw new Error('Model endpoint must use HTTPS');
+    }
+    const effort=['low','medium','high','xhigh'].includes(request?.effort)?request.effort:'';
     const messages=[{role:'system',content:request.system},{role:'user',content:request.user}];
     let actions=0;
     for(let step=0;step<5;step++) {
       if(step) await request.beforeAdditionalModelCall();
       const useTools=Boolean(request.browser) && actions<4 && step<4;
-      const response=await fetch(this.endpoint,{
+      const response=await fetch(endpoint,{
         method:'POST',redirect:'error',
         signal:AbortSignal.any([AbortSignal.timeout(20000),...(signal?[signal]:[])]),
-        headers:{'content-type':'application/json',authorization:'Bearer '+this.key},
-        body:JSON.stringify({model:this.name,messages,max_completion_tokens:512,
+        headers:{'content-type':'application/json',authorization:'Bearer '+key},
+        body:JSON.stringify({model,messages,max_completion_tokens:512,
+          ...(effort?{reasoning_effort:effort}:{}),
           ...(useTools?{tools:BROWSER_TOOL_DEFINITIONS,tool_choice:'auto',parallel_tool_calls:false}:{})}),
       });
       if(!response.ok){await response.body?.cancel();throw new Error('Model provider rejected request');}

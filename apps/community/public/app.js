@@ -20,6 +20,10 @@ const state = {
   recordingPending: false,
   recordingCancelled: false,
   attachmentGeneration: 0,
+  layout: 1,
+  extra: [],
+  focusPane: 0,
+  models: [],
 };
 let desktopUI;
 let pwaUI;
@@ -162,6 +166,21 @@ function showAuth() {
   state.selectedBots = [];
   state.botChoiceTouched = false;
   state.pendingSend = null;
+  state.layout = 1;
+  state.extra = [];
+  state.focusPane = 0;
+  state.models = [];
+  const paneGrid = $("#pane-grid");
+  if (paneGrid) {
+    paneGrid.dataset.panes = "1";
+    $$(".extra-pane", paneGrid).forEach((pane) => pane.remove());
+  }
+  $("#room-view").style.gridColumn = "";
+  $("#room-view").classList.remove("is-focus");
+  $$(".split-picker button").forEach((button) => {
+    button.classList.remove("is-on");
+    button.setAttribute("aria-pressed", "false");
+  });
   clearPendingAttachments();
   desktopUI?.reset();
   state.roomRequest += 1;
@@ -190,13 +209,15 @@ async function enterWorkspace() {
   $("#site-invite-button").classList.toggle("is-hidden", user.role !== "admin");
   const model = state.session.model || {};
   els.demoBadge.classList.toggle("is-hidden", !model.demo);
-  els.modelWarning.classList.toggle("is-hidden", Boolean(model.configured));
+  els.modelWarning.classList.toggle("is-hidden", Boolean(model.configured) || Boolean(model.selectable));
   els.modelStatus.classList.toggle("is-hidden", !model.configured || Boolean(model.demo));
-  els.modelStatus.textContent = model.configured
+  const connected = model.configured
     ? model.backend === "openclaw"
       ? "OpenClaw 연결됨"
       : "AI 연결됨"
-      : "";
+    : "";
+  els.modelStatus.textContent = [connected, model.selectable ? "API 순환" : ""].filter(Boolean).join(" · ");
+  els.modelStatus.classList.toggle("is-hidden", !els.modelStatus.textContent);
   pwaUI?.setSession(state.session);
   await loadRooms();
 }
@@ -256,7 +277,8 @@ function renderRooms() {
   visibleRooms.forEach((room) => {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = `room-item ${room.id === state.selectedRoom ? "is-active" : ""}`;
+    const openIds = new Set([state.selectedRoom, ...state.extra.map((pane) => pane.roomId)]);
+    button.className = `room-item ${openIds.has(room.id) ? "is-active" : ""}`;
     button.dataset.roomId = room.id;
     const roomIcon = document.createElement("span");
     roomIcon.className = "room-icon";
@@ -270,7 +292,8 @@ function renderRooms() {
     copy.append(name, meta);
     button.append(roomIcon, copy);
     button.addEventListener("click", () => {
-      selectRoom(room.id);
+      if (state.focusPane > 0) assignExtra(state.focusPane - 1, room.id);
+      else selectRoom(room.id);
       closeSidebar();
     });
     els.roomList.append(button);
@@ -287,6 +310,10 @@ function showEmpty() {
 }
 async function selectRoom(id) {
   if (!id) return;
+  const previous = state.selectedRoom;
+  state.extra.forEach((pane) => {
+    if (pane.roomId === id) pane.roomId = previous && previous !== id ? previous : null;
+  });
   state.selectedRoom = id;
   try {
     sessionStorage.setItem("community-room:" + state.session.user.id, id);
@@ -312,6 +339,10 @@ async function selectRoom(id) {
     $("#room-invite-button").classList.toggle("is-hidden", !canInvite);
   }
   updateBotLabel();
+  if (state.layout > 1) {
+    renderExtraPanes();
+    refreshExtras();
+  }
   await refreshRoom(true);
   startPolling();
 }
@@ -355,7 +386,10 @@ async function refreshRoom(force = false) {
 }
 function startPolling() {
   stopPolling();
-  state.pollTimer = setInterval(refreshRoom, 3000);
+  state.pollTimer = setInterval(() => {
+    refreshRoom();
+    refreshExtras();
+  }, 3000);
 }
 function stopPolling() {
   if (state.pollTimer) clearInterval(state.pollTimer);
@@ -730,6 +764,8 @@ async function submitMessage(event) {
     botIds,
     attachmentIds,
     clientNonce: state.pendingSend.nonce,
+    model: $("#model-select").value,
+    effort: $("#effort-select").value,
   });
   state.sending = true;
   $("#send-button").disabled = true;
@@ -737,11 +773,12 @@ async function submitMessage(event) {
   els.sendingStatus.textContent = "메시지를 보내는 중…";
   els.sendingStatus.classList.add("is-visible");
   try {
-    await api(`/api/rooms/${encodeURIComponent(roomId)}/messages`, {
+    const result = await api(`/api/rooms/${encodeURIComponent(roomId)}/messages`, {
       method: "POST",
       body: payload,
       retryable: true,
     });
+    if (Array.isArray(result.models)) applyModels(result.models);
     state.pendingSend = null;
     clearPendingAttachments();
     input.value = "";
@@ -854,6 +891,238 @@ function closeSidebar() {
   $("#sidebar").classList.remove("is-open");
   $("#sidebar-scrim").classList.remove("is-visible");
 }
+function applyModels(models) {
+  if (Array.isArray(models)) state.models = models;
+  for (const select of $$(".model-select")) {
+    const chosen = select.dataset.chosen ?? select.value;
+    select.replaceChildren();
+    const auto = document.createElement("option");
+    auto.value = "";
+    auto.textContent = "자동 순환";
+    select.append(auto);
+    for (const model of state.models) {
+      const option = document.createElement("option");
+      option.value = model.value;
+      const providers = (model.providers || []).join(", ");
+      option.textContent = providers ? providers + " · " + model.id : model.id;
+      select.append(option);
+    }
+    select.value = [...select.options].some((option) => option.value === chosen) ? chosen : "";
+    select.dataset.chosen = select.value;
+  }
+}
+function setLayout(count) {
+  if (!state.selectedRoom || count < 2 || count > 8) return;
+  if (state.layout === count) {
+    state.layout = 1;
+    state.extra = [];
+    state.focusPane = 0;
+    $("#pane-grid").dataset.panes = "1";
+    $("#room-view").style.gridColumn = "";
+    $("#room-view").classList.remove("is-focus");
+    $$(".extra-pane").forEach((pane) => pane.remove());
+    $$(".split-picker button").forEach((button) => {
+      button.classList.remove("is-on");
+      button.setAttribute("aria-pressed", "false");
+    });
+    renderRooms();
+    return;
+  }
+  state.layout = count;
+  state.focusPane = 0;
+  const ids = [state.selectedRoom];
+  for (const room of state.rooms) {
+    if (ids.length >= count) break;
+    if (!ids.includes(room.id)) ids.push(room.id);
+  }
+  state.extra = ids.slice(1).map((roomId) => ({ roomId, data: null, busy: false, request: 0, model: "", effort: "" }));
+  while (state.extra.length < count - 1) state.extra.push({ roomId: null, data: null, busy: false, request: 0, model: "", effort: "" });
+  $("#pane-grid").dataset.panes = String(count);
+  $$(".split-picker button").forEach((button) => {
+    const on = Number(button.dataset.split) === count;
+    button.classList.toggle("is-on", on);
+    button.setAttribute("aria-pressed", on ? "true" : "false");
+  });
+  $("#room-view").classList.add("is-focus");
+  renderExtraPanes();
+  renderRooms();
+  refreshExtras();
+}
+function renderExtraPanes() {
+  const grid = $("#pane-grid");
+  const spans = { 5: [2, 2, 2, 3, 3], 7: [3, 3, 3, 3, 4, 4, 4] }[state.layout];
+  $$(".extra-pane", grid).forEach((pane) => pane.remove());
+  $("#room-view").style.gridColumn = spans ? "span " + spans[0] : "";
+  state.extra.forEach((pane, index) => {
+    const room = state.rooms.find((item) => item.id === pane.roomId);
+    const section = document.createElement("section");
+    section.className = "room-view extra-pane" + (state.focusPane === index + 1 ? " is-focus" : "");
+    if (spans) section.style.gridColumn = "span " + spans[index + 1];
+    section.addEventListener("mousedown", () => {
+      state.focusPane = index + 1;
+      $("#room-view").classList.remove("is-focus");
+      $$(".extra-pane").forEach((item, itemIndex) => item.classList.toggle("is-focus", itemIndex + 1 === state.focusPane));
+    });
+    const header = document.createElement("header");
+    header.className = "pane-bar";
+    const title = document.createElement("h2");
+    title.textContent = room?.name || "대화 선택";
+    header.append(title);
+    const list = document.createElement("div");
+    list.className = "message-list";
+    const messages = pane.data?.messages || [];
+    if (messages.length) messages.forEach((message) => list.append(createMessage(message)));
+    else {
+      const empty = document.createElement("div");
+      empty.className = "message-empty";
+      const note = document.createElement("span");
+      note.textContent = pane.roomId ? "메시지를 불러오는 중…" : "이 칸을 누른 뒤 왼쪽 대화를 고르세요.";
+      empty.append(note);
+      list.append(empty);
+    }
+    const form = document.createElement("form");
+    form.className = "composer pane-composer";
+    form.addEventListener("submit", (event) => submitPane(event, index));
+    const controls = document.createElement("div");
+    controls.className = "model-controls";
+    controls.append(modelSelect(pane), effortSelect(pane));
+    const row = document.createElement("div");
+    row.className = "composer-row";
+    const input = document.createElement("textarea");
+    input.rows = 1;
+    input.maxLength = 4000;
+    input.placeholder = "메시지 보내기. model 이면 목록을 가져옵니다.";
+    input.setAttribute("aria-label", (room?.name || "대화") + " 메시지");
+    input.addEventListener("keydown", (event) => {
+      if (event.isComposing || event.keyCode === 229) return;
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        form.requestSubmit();
+      }
+    });
+    const send = document.createElement("button");
+    send.type = "submit";
+    send.className = "send-button";
+    send.setAttribute("aria-label", "메시지 보내기");
+    send.append(icon("arrow"));
+    row.append(input, send);
+    form.append(controls, row);
+    section.append(header, list, form);
+    grid.append(section);
+  });
+  applyModels(state.models);
+}
+function modelSelect(pane) {
+  const label = document.createElement("label");
+  label.append(document.createTextNode("모델 "));
+  const select = document.createElement("select");
+  select.className = "model-select";
+  select.setAttribute("aria-label", "모델");
+  select.dataset.chosen = pane.model || "";
+  select.addEventListener("change", () => {
+    pane.model = select.value;
+    select.dataset.chosen = select.value;
+  });
+  label.append(select);
+  return label;
+}
+function effortSelect(pane) {
+  const label = document.createElement("label");
+  label.append(document.createTextNode("effort "));
+  const select = document.createElement("select");
+  select.className = "effort-select";
+  select.setAttribute("aria-label", "effort");
+  for (const [value, text] of [["", "기본"], ["low", "low"], ["medium", "medium"], ["high", "high"], ["xhigh", "xhigh"]]) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = text;
+    select.append(option);
+  }
+  select.value = pane.effort || "";
+  select.addEventListener("change", () => { pane.effort = select.value; });
+  label.append(select);
+  return label;
+}
+async function submitPane(event, index) {
+  event.preventDefault();
+  const pane = state.extra[index];
+  if (!pane?.roomId || pane.sending) return;
+  const form = event.currentTarget;
+  const input = $("textarea", form);
+  const text = input.value.trim();
+  if (!text) return;
+  pane.sending = true;
+  try {
+    const result = await api(`/api/rooms/${encodeURIComponent(pane.roomId)}/messages`, {
+      method: "POST",
+      body: JSON.stringify({
+        text,
+        botIds: state.selectedBots,
+        attachmentIds: [],
+        clientNonce: crypto.randomUUID(),
+        model: $(".model-select", form).value,
+        effort: $(".effort-select", form).value,
+      }),
+      retryable: true,
+    });
+    input.value = "";
+    if (Array.isArray(result.models)) applyModels(result.models);
+    await refreshExtra(index);
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    pane.sending = false;
+  }
+}
+async function refreshExtra(index) {
+  const pane = state.extra[index];
+  if (!pane?.roomId || pane.busy) return;
+  const request = ++pane.request;
+  const roomId = pane.roomId;
+  pane.busy = true;
+  try {
+    const data = await api(`/api/rooms/${encodeURIComponent(roomId)}`);
+    if (state.extra[index] !== pane || pane.roomId !== roomId || pane.request !== request) return;
+    pane.data = data;
+    const section = $$(".extra-pane")[index];
+    if (!section) return;
+    const list = $(".message-list", section);
+    const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 90;
+    list.replaceChildren();
+    const messages = data.messages || [];
+    if (messages.length) messages.forEach((message) => list.append(createMessage(message)));
+    else {
+      const empty = document.createElement("div");
+      empty.className = "message-empty";
+      const note = document.createElement("span");
+      note.textContent = "메시지를 보내 대화를 시작하세요.";
+      empty.append(note);
+      list.append(empty);
+    }
+    if (nearBottom) list.scrollTop = list.scrollHeight;
+    $("h2", section).textContent = data.room?.name || "대화";
+  } catch (error) {
+    if (pane.request === request && error.status !== 401) toast(error.message);
+  } finally {
+    if (pane.request === request) pane.busy = false;
+  }
+}
+function refreshExtras() {
+  state.extra.forEach((_, index) => { void refreshExtra(index); });
+}
+function assignExtra(index, roomId) {
+  const pane = state.extra[index];
+  if (!pane || roomId === state.selectedRoom) return;
+  state.extra.forEach((item, itemIndex) => {
+    if (itemIndex !== index && item.roomId === roomId) item.roomId = pane.roomId;
+  });
+  pane.roomId = roomId;
+  pane.data = null;
+  pane.busy = false;
+  renderExtraPanes();
+  renderRooms();
+  void refreshExtra(index);
+}
 function bind() {
   $("#room-search").addEventListener("input", renderRooms);
   document.addEventListener("keydown", (event) => {
@@ -910,6 +1179,16 @@ function bind() {
   $("#room-form").addEventListener("submit", createRoom);
   $("#join-form").addEventListener("submit", joinRoom);
   $("#composer-form").addEventListener("submit", submitMessage);
+  $("#model-select").addEventListener("change", (event) => { event.target.dataset.chosen = event.target.value; });
+  $("#room-view").addEventListener("mousedown", () => {
+    if (state.layout < 2) return;
+    state.focusPane = 0;
+    $("#room-view").classList.add("is-focus");
+    $$(".extra-pane").forEach((pane) => pane.classList.remove("is-focus"));
+  });
+  $$(".split-picker button").forEach((button) => {
+    button.addEventListener("click", () => setLayout(Number(button.dataset.split)));
+  });
   $("#attach-button").addEventListener("click", () => $("#attachment-input").click());
   $("#attachment-input").addEventListener("change", (event) => {
     uploadAttachments(event.target.files);

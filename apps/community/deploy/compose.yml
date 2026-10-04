@@ -15,7 +15,9 @@ services:
     cgroup_parent: community.slice
     restart: unless-stopped
     init: true
-    env_file: .env.production
+    env_file:
+      - .env.production
+      - .env.openclaw
     environment:
       COMMUNITY_MONITOR_PATH: /run/community-monitor/status.json
     ports:

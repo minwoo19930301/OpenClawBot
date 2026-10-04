@@ -239,3 +239,36 @@ test("startCommunity uses an injected OpenClaw adapter and persists its bot mess
   assert.equal(snapshot.messages.some((message) => message.kind === "bot" && message.text === "OpenClaw fixture response"), true);
   assert.equal((await c.request("/api/session", undefined, "GET")).value.model.backend, "openclaw");
 });
+
+test("typing model fetches the live API lists and does not reveal keys", async (t) => {
+  const dataDir = await mkdtemp(join(tmpdir(), "community-models-"));
+  const urls = [];
+  const app = await startCommunity({
+    dataDir,
+    port: 0,
+    env: {
+      COMMUNITY_BOOTSTRAP_TOKEN: "bootstrap",
+      COMMUNITY_PORT: "0",
+      GROQ_API_KEY: "secret-live-key",
+      OPENROUTER_API_KEY: "secret-route-key",
+    },
+    fetchImpl: async (url) => {
+      urls.push(String(url));
+      const id = String(url).includes("groq") ? "llama-3.1-8b-instant" : "router-model";
+      return new Response(JSON.stringify({ data: [{ id }] }), { status: 200, headers: { "content-type": "application/json" } });
+    },
+  });
+  t.after(() => app.close());
+  const c = client(app);
+  await register(c);
+  const id = await createRoom(c, "models");
+  const posted = await c.request(`/api/rooms/${id}/messages`, { text: "model", botIds: [], clientNonce: "model-1" });
+  assert.equal(posted.response.status, 202);
+  assert.equal(urls.length, 2);
+  assert.equal(JSON.stringify(posted.value).includes("secret-"), false);
+  assert.equal(posted.value.models.some((model) => model.id === "llama-3.1-8b-instant"), true);
+  const snapshot = await room(c, id);
+  const listing = snapshot.messages.find((message) => message.kind === "bot");
+  assert.match(listing.text, /llama-3\.1-8b-instant/);
+  assert.equal(listing.text.includes("secret-"), false);
+});

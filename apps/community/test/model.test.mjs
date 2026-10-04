@@ -43,6 +43,14 @@ test("unknown tools, invalid arguments, and action budgets are rejected before e
   await assert.rejects(() => withFetch([{ content: null, tool_calls: calls }], async () => llm().complete(request({ browser: async () => "bad" }))), /Browser action budget exceeded/);
 });
 
+test("selected effort is sent with the provider request", async () => {
+  await withFetch([{ content: "effort response" }], async (bodies) => {
+    await llm().complete(request({ effort: "high", model: "picked-model" }));
+    assert.equal(bodies[0].reasoning_effort, "high");
+    assert.equal(bodies[0].model, "picked-model");
+  });
+});
+
 test("plain requests omit browser tools and preserve a plain text response", async () => {
   const result = await withFetch([{ content: "plain response" }], async (bodies) => {
     const text = await llm().complete(request());

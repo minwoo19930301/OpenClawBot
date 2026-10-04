@@ -1152,7 +1152,7 @@ button {
 :root { --bg:#0c0d0f; --sidebar:#131416; --surface:#1c1d20; --line:#ffffff12; --hover:#ffffff0a; --selected:#ffffff10; --bot-bubble:#202226; --own-bubble:#363a40; --ease-out:cubic-bezier(.22,1,.36,1); }
 .workspace-view { transition:grid-template-columns 260ms var(--ease-out); }
 .sidebar { transition:opacity 180ms ease,transform 260ms var(--ease-out),visibility 260ms; }
-.sidebar-collapsed .sidebar { opacity:0; pointer-events:none; }
+@media(min-width:721px) { .sidebar-collapsed .sidebar { opacity:0; pointer-events:none; } }
 .room-item { border-radius:12px; transition:background 160ms ease,box-shadow 160ms ease; }
 .room-item.is-active { box-shadow:inset 0 0 0 1px #ffffff08; }
 .room-item-copy strong { letter-spacing:-.15px; }

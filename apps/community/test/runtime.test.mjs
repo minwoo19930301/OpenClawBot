@@ -272,3 +272,19 @@ test("typing model fetches the live API lists and does not reveal keys", async (
   assert.match(listing.text, /llama-3\.1-8b-instant/);
   assert.equal(listing.text.includes("secret-"), false);
 });
+
+test("model picker catalog requires login and loads without a chat command", async (t) => {
+  const dataDir = await mkdtemp(join(tmpdir(), "community-model-picker-"));
+  const app = await startCommunity({dataDir, port: 0,
+    env: {COMMUNITY_BOOTSTRAP_TOKEN: "bootstrap", GROQ_API_KEY: "private-test-key"},
+    fetchImpl: async () => ({ok: true, json: async () => ({data: [{id: "test-chat-model"}]})}),
+  });
+  t.after(() => app.close());
+  assert.equal((await fetch(app.url + "/api/models")).status, 401);
+  const c = client(app);
+  await register(c);
+  const {response, value} = await c.request("/api/models", undefined, "GET");
+  assert.equal(response.status, 200);
+  assert.equal(value.models[0].id, "test-chat-model");
+  assert.equal(JSON.stringify(value).includes("private-test-key"), false);
+});

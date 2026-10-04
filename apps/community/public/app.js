@@ -220,6 +220,11 @@ async function enterWorkspace() {
   els.modelStatus.classList.toggle("is-hidden", !els.modelStatus.textContent);
   pwaUI?.setSession(state.session);
   await loadRooms();
+  try {
+    const catalog = await api("/api/models");
+    applyModels(catalog.models);
+    if (!catalog.models.length) toast(catalog.failures.length ? "모델 목록을 가져오지 못했습니다. 기본 모델로 연결됩니다." : "선택 가능한 API 모델이 없습니다. 기본 모델로 연결됩니다.");
+  } catch (error) { toast(error.message || "모델 목록을 불러오지 못했습니다."); }
 }
 async function loadRooms() {
   try {
@@ -315,6 +320,10 @@ async function selectRoom(id) {
     if (pane.roomId === id) pane.roomId = previous && previous !== id ? previous : null;
   });
   state.selectedRoom = id;
+  const prefs = roomPreferences(id);
+  $("#model-select").dataset.chosen = prefs.model || "";
+  $("#effort-select").value = prefs.effort || "";
+  applyModels(state.models);
   try {
     sessionStorage.setItem("community-room:" + state.session.user.id, id);
   } catch {}
@@ -891,6 +900,13 @@ function closeSidebar() {
   $("#sidebar").classList.remove("is-open");
   $("#sidebar-scrim").classList.remove("is-visible");
 }
+function roomPreferences(id) {
+  try { return JSON.parse(localStorage.getItem("community-model:" + state.session.user.id + ":" + id) || "{}"); } catch { return {}; }
+}
+function saveRoomPreferences(id, prefs) {
+  if (!id) return;
+  try { localStorage.setItem("community-model:" + state.session.user.id + ":" + id, JSON.stringify(prefs)); } catch {}
+}
 function applyModels(models) {
   if (Array.isArray(models)) state.models = models;
   for (const select of $$(".model-select")) {
@@ -954,6 +970,7 @@ function renderExtraPanes() {
   $$(".extra-pane", grid).forEach((pane) => pane.remove());
   $("#room-view").style.gridColumn = spans ? "span " + spans[0] : "";
   state.extra.forEach((pane, index) => {
+    Object.assign(pane, roomPreferences(pane.roomId));
     const room = state.rooms.find((item) => item.id === pane.roomId);
     const section = document.createElement("section");
     section.className = "room-view extra-pane" + (state.focusPane === index + 1 ? " is-focus" : "");
@@ -968,6 +985,12 @@ function renderExtraPanes() {
     const title = document.createElement("h2");
     title.textContent = room?.name || "대화 선택";
     header.append(title);
+    const desktopButton = document.createElement("button");
+    desktopButton.type = "button";
+    desktopButton.textContent = "컴퓨터";
+    desktopButton.disabled = !pane.roomId;
+    desktopButton.addEventListener("click", () => desktopUI?.openRoom(pane.roomId));
+    header.append(desktopButton);
     const list = document.createElement("div");
     list.className = "message-list";
     const messages = pane.data?.messages || [];
@@ -1021,6 +1044,7 @@ function modelSelect(pane) {
   select.dataset.chosen = pane.model || "";
   select.addEventListener("change", () => {
     pane.model = select.value;
+    saveRoomPreferences(pane.roomId, {model:pane.model, effort:pane.effort || ""});
     select.dataset.chosen = select.value;
   });
   label.append(select);
@@ -1039,7 +1063,7 @@ function effortSelect(pane) {
     select.append(option);
   }
   select.value = pane.effort || "";
-  select.addEventListener("change", () => { pane.effort = select.value; });
+  select.addEventListener("change", () => { pane.effort = select.value; saveRoomPreferences(pane.roomId, {model:pane.model || "", effort:pane.effort}); });
   label.append(select);
   return label;
 }
@@ -1179,10 +1203,14 @@ function bind() {
   $("#room-form").addEventListener("submit", createRoom);
   $("#join-form").addEventListener("submit", joinRoom);
   $("#composer-form").addEventListener("submit", submitMessage);
-  $("#model-select").addEventListener("change", (event) => { event.target.dataset.chosen = event.target.value; });
+  for (const selector of ["#model-select", "#effort-select"]) $(selector).addEventListener("change", () => {
+    $("#model-select").dataset.chosen = $("#model-select").value;
+    saveRoomPreferences(state.selectedRoom, {model:$("#model-select").value, effort:$("#effort-select").value});
+  });
   $("#room-view").addEventListener("mousedown", () => {
     if (state.layout < 2) return;
     state.focusPane = 0;
+    desktopUI?.setRoom(state.selectedRoom);
     $("#room-view").classList.add("is-focus");
     $$(".extra-pane").forEach((pane) => pane.classList.remove("is-focus"));
   });

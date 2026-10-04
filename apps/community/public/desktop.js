@@ -286,6 +286,7 @@ export function createDesktopUI({ api, getRoomId, toast = () => {} }) {
   });
 
   return {
+    openRoom(roomId) { this.setRoom(roomId); openPanel(); },
     setRoom(roomId) {
       if (roomId === state.roomId) return;
       hideDialog();
@@ -298,9 +299,7 @@ export function createDesktopUI({ api, getRoomId, toast = () => {} }) {
         return;
       }
       button.hidden = false;
-      panel.hidden = false;
-      button.setAttribute("aria-expanded", "true");
-      refreshStatus();
+      if (!panel.hidden) refreshStatus();
     },
     reset() {
       state.request += 1;

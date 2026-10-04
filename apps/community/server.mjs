@@ -636,6 +636,11 @@ export async function startCommunity(options = {}) {
         });
         return issueSession(account, res, 201);
       }
+      if (url.pathname === "/api/models" && method === "GET") {
+        limit("models:" + user.id, 8);
+        const listed = await pool.listModels();
+        return reply(res, 200, {models: publicModels(listed), failures: listed.failures});
+      }
       const desktopMatch = url.pathname.match(/^\/api\/rooms\/([a-f0-9-]{36})\/desktop(?:\/(ticket|start))?$/);
       if (desktopMatch) {
         const room = roomFor(desktopMatch[1], user);

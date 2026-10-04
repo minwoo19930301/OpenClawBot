@@ -13,6 +13,7 @@
     "@novnc/novnc": "1.7.0",
     "@open-grokbot/llm": "0.1.0",
     "@open-grokbot/runner": "0.1.0",
+    "bcryptjs": "3.0.3",
     "busboy": "1.6.0",
     "imapflow": "2.2.5",
     "playwright-core": "1.63.0",

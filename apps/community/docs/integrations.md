@@ -25,7 +25,9 @@ Groq, Gemini, Hugging Face, NVIDIA NIM, Cohere, OpenRouter 및 기존 OpenAI/xAI
 - Cloudinary: 이미지 메타데이터 목록.
 - Telegram: 봇 프로필 확인. 메시지 발송/업데이트 소비/웹훅 변경 없음.
 - Cohere: 모델 목록 및 대화 모델 풀.
-- Naver Commerce, Fal, Jina: 자격 증명 보관/목록 표시만. 실행 어댑터는 아직 미연결.
+- Naver Commerce: bcrypt 서명 기반 서버 인증 확인. 토큰 값은 반환하지 않는다.
+- Fal: 모델 목록 조회. 생성·결제 호출 없음.
+- Jina: 검색 결과 최대 5개 조회.
 
 클라우드/DB 관리키(OCI, Cloudflare, Vercel, GitHub, Turso, Supabase 등)를 공동 대화에 일괄 주입하지 않는다. 서비스 실행에 필요한 최소 인증 정보만 관리자 연결 저장소에 넣는다.
 

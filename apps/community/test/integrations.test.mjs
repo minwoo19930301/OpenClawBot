@@ -25,3 +25,12 @@ test('personal integrations require admin and CSRF, independent of room membersh
  assert.equal((await call('/api/admin/integrations/meta/profile',{},headers)).status,200);assert.equal(executions,1);
  }finally{await app.close();await rm(dir,{recursive:true,force:true});}
 });
+
+test('commerce auth never returns its token and public model discovery is labeled honestly',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'commerce-'));const path=join(dir,'keys.json');
+ try{await writeFile(path,JSON.stringify({NAVER_COMMERCE_CLIENT_ID:'id',NAVER_COMMERCE_CLIENT_SECRET:'$2a$04$abcdefghijklmnopqrstuu',FAL_KEY:'secret'}));
+ const service=createIntegrations({path,fetchImpl:async url=>Response.json(url.includes('naver')?{access_token:'private-access',expires_in:100}:{models:[]})});
+ const result=await service.execute('naver-commerce','auth');assert.equal(result.authenticated,true);assert.equal(JSON.stringify(result).includes('private-access'),false);
+ assert.match((await service.execute('fal','models')).note,/공개 모델 목록/);
+ }finally{await rm(dir,{recursive:true,force:true});}
+});

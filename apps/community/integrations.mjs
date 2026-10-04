@@ -1,4 +1,5 @@
 import {readFile, writeFile, rename} from 'node:fs/promises';
+import bcrypt from 'bcryptjs';
 import {ImapFlow} from 'imapflow';
 
 const DEFINITIONS = [
@@ -8,11 +9,11 @@ const DEFINITIONS = [
  ['tavily','Tavily 검색',['TAVILY_API_KEY'],['search']],
  ['elevenlabs','ElevenLabs',['ELEVENLABS_API_KEY'],['voices']],
  ['replicate','Replicate',['REPLICATE_API_TOKEN'],['account']],
- ['naver-commerce','네이버 커머스',['NAVER_COMMERCE_CLIENT_ID','NAVER_COMMERCE_CLIENT_SECRET'],[]],
+ ['naver-commerce','네이버 커머스',['NAVER_COMMERCE_CLIENT_ID','NAVER_COMMERCE_CLIENT_SECRET'],['auth']],
  ['firecrawl','Firecrawl',['FIRECRAWL_API_KEY'],['credits']],
  ['cohere','Cohere',['COHERE_API_KEY'],['models']],
- ['fal','Fal',['FAL_KEY'],[]],
- ['jina','Jina',['JINA_API_KEY'],[]],
+ ['fal','Fal',['FAL_KEY'],['models']],
+ ['jina','Jina',['JINA_API_KEY'],['search']],
  ['resend','Resend',['RESEND_API_KEY'],['domains']],
  ['cloudinary','Cloudinary',['CLOUDINARY_API_KEY','CLOUDINARY_API_SECRET','CLOUDINARY_CLOUD_NAME'],['assets']],
  ['telegram','Telegram',['TELEGRAM_BOT_TOKEN'],['profile']],
@@ -91,6 +92,22 @@ export function createIntegrations({path, fetchImpl=fetch, imapFactory=options=>
      if(id==='elevenlabs') {
        const data=await rotated(c,'ELEVENLABS_API_KEY',token=>json('https://api.elevenlabs.io/v1/voices','',{headers:{'xi-api-key':token}}));
        return {voices:data.voices?.map(v=>({id:v.voice_id,name:v.name}))};
+     }
+     if(id==='naver-commerce') {
+       const timestamp=String(Date.now());
+       if(!/^\$2[aby]\$\d{2}\$/.test(c.NAVER_COMMERCE_CLIENT_SECRET))throw failure(409,'네이버 커머스 시크릿 형식을 확인해 주세요.');
+       const hashed=await bcrypt.hash(c.NAVER_COMMERCE_CLIENT_ID+'_'+timestamp,c.NAVER_COMMERCE_CLIENT_SECRET);
+       const d=await json('https://api.commerce.naver.com/external/v1/oauth2/token','',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:c.NAVER_COMMERCE_CLIENT_ID,timestamp,client_secret_sign:Buffer.from(hashed).toString('base64'),grant_type:'client_credentials',type:'SELF'})});
+       return {authenticated:Boolean(d.access_token),expiresIn:d.expires_in};
+     }
+     if(id==='fal') {
+       const d=await json('https://api.fal.ai/v1/models?limit=20','',{headers:{authorization:'Key '+c.FAL_KEY}});
+       return {models:d.models?.map(v=>({id:v.endpoint_id,name:v.metadata?.display_name,category:v.metadata?.category})),note:'공개 모델 목록 조회입니다. 생성 권한과 잔여 크레딧은 별도입니다.'};
+     }
+     if(id==='jina') {
+       if(typeof input.query!=='string'||!input.query.trim()||input.query.length>500)throw failure(400,'검색어를 입력해 주세요.');
+       const d=await json('https://s.jina.ai/'+encodeURIComponent(input.query),c.JINA_API_KEY,{headers:{accept:'application/json','x-token-budget':'2000'}});
+       return {results:d.data?.slice(0,5).map(v=>({title:v.title,url:v.url,content:v.content?.slice(0,2000)}))};
      }
      if(id==='firecrawl') return rotated(c,'FIRECRAWL_API_KEY',token=>json('https://api.firecrawl.dev/v2/team/credit-usage',token));
      if(id==='resend') {

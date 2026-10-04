@@ -1,7 +1,7 @@
 const status=document.querySelector('#status'), services=document.querySelector('#services');
 let csrf;
 async function api(path,body){const r=await fetch(path,{cache:'no-store',...(body?{method:'POST',headers:{'content-type':'application/json','x-csrf-token':csrf},body:JSON.stringify(body)}:{})});const d=await r.json();if(!r.ok)throw Error(d.error||'연결 실패');return d;}
-const labels={credits:'잔여 크레딧 확인',domains:'등록 도메인 조회',assets:'이미지 목록 조회',models:'모델 목록 조회',inbox:'받은메일 20개 조회',calendars:'캘린더 조회',profile:'인증·프로필 확인',search:'검색',voices:'음성 목록',account:'계정 확인'};
+const labels={auth:"서버 인증 확인",credits:'잔여 크레딧 확인',domains:'등록 도메인 조회',assets:'이미지 목록 조회',models:'모델 목록 조회',inbox:'받은메일 20개 조회',calendars:'캘린더 조회',profile:'인증·프로필 확인',search:'검색',voices:'음성 목록',account:'계정 확인'};
 try {
  const session=await api('/api/session');if(session.user?.role!=='admin')throw Error('사이트 관리자 로그인이 필요합니다.');csrf=session.csrfToken;
  const data=await api('/api/admin/integrations');

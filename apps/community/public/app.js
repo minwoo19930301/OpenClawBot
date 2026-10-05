@@ -351,9 +351,9 @@ async function selectRoom(id) {
     els.roomTitle.textContent = room.name;
     els.mobileRoomTitle.textContent = room.name;
     els.roomDescription.textContent = room.description || "";
-    const canInvite = room.id !== MONITOR_ROOM &&
+    const canInvite = !room.personal && room.id !== MONITOR_ROOM &&
       (room.role === "owner" || state.session.user.role === "admin");
-    els.roomKicker.textContent = canInvite ? "방장" : "공동 대화";
+    els.roomKicker.textContent = room.personal ? "개인 비서 · 연결 서비스" : canInvite ? "방장" : "공동 대화";
     $("#room-invite-button").classList.toggle("is-hidden", !canInvite);
   }
   updateBotLabel();

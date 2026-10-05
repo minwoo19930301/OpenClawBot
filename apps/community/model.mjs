@@ -16,7 +16,7 @@ export class ApiLlm {
       if(endpoint.protocol!=='https:' && !['localhost','127.0.0.1','[::1]'].includes(endpoint.hostname)) throw new Error('Model endpoint must use HTTPS');
     }
     const effort=['low','medium','high','xhigh'].includes(request?.effort)?request.effort:'';
-    const messages=[{role:'system',content:request.system},{role:'user',content:request.user}];
+    const messages=[{role:'system',content:request.system},{role:'user',content:request.images?.length ? [{type:'text',text:request.user},...request.images.map(image=>({type:'image_url',image_url:{url:image}}))] : request.user}];
     const definitions=request.toolDefinitions || BROWSER_TOOL_DEFINITIONS;
     let actions=0, candidateIndex=0;
     for(let step=0;step<5;step++) {
@@ -34,9 +34,9 @@ export class ApiLlm {
         try {
           response=await fetch(target,{
             method:'POST',redirect:'error',
-            signal:AbortSignal.any([AbortSignal.timeout(12000),...(signal?[signal]:[])]),
+            signal:AbortSignal.any([AbortSignal.timeout(request.images?.length ? 30000 : 12000),...(signal?[signal]:[])]),
             headers:{'content-type':'application/json',authorization:'Bearer '+candidate.apiKey},
-            body:JSON.stringify({model:candidate.model,messages,max_tokens:512,
+            body:JSON.stringify({model:candidate.model,messages,max_tokens:request.images?.length ? 2048 : 512,
               ...(effort && (!candidate.provider || /openai|groq/.test(candidate.provider)) ? {reasoning_effort:effort}:{}),
               ...(useTools?{tools:definitions,tool_choice:'auto'}:{})}),
           });

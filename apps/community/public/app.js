@@ -245,9 +245,8 @@ async function loadRooms() {
     ) {
       state.selectedBots = [state.bots[0].id];
     }
-    els.usage.textContent = data.usage
-      ? `오늘 ${data.usage.used} / ${data.usage.limit}회`
-      : "";
+    els.usage.textContent = "";
+    els.usage.title = data.usage ? `앱의 하루 호출 사용량 ${data.usage.used} / ${data.usage.limit}회 · 공급자 잔여량과 별개` : "";
     renderRooms();
     renderBotPicker();
     if (!state.rooms.length) showEmpty();
@@ -590,7 +589,7 @@ function updateBotLabel() {
     .map((id) => state.bots.find((bot) => bot.id === id)?.name)
     .filter(Boolean);
   $("#bot-picker-label").textContent = selected.length
-    ? `AI 답변 켜짐 · ${selected.join(", ")}`
+    ? (selected.length > 1 ? `AI 응답 · ${selected.length}개 역할` : "AI 응답")
     : "AI 답변 꺼짐 · 사람끼리 대화";
 }
 function clearPendingAttachments() {

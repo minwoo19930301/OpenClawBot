@@ -79,3 +79,13 @@ test('private service tools use only supplied definitions and never replay compl
  assert.match(result,/done/);assert.equal(reads,1);assert.deepEqual(keys,['Bearer a','Bearer b','Bearer b','Bearer c']);
  }finally{globalThis.fetch=original;}
 });
+
+test("image requests send actual pixels to the vision provider", async () => {
+  await withFetch([{content:"OCR fixture"}], async bodies=>{
+    const pixels="data:image/png;base64,aW1hZ2U=";
+    await llm().complete(request({images:[pixels]}));
+    assert.deepEqual(bodies[0].messages[1].content,[{type:"text",text:"hello"},{type:"image_url",image_url:{url:pixels}}]);
+    assert.equal(bodies[0].max_tokens,2048);
+    assert.equal(bodies[0].tools,undefined);
+  });
+});

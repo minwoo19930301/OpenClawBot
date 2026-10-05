@@ -60,6 +60,12 @@ test('personal chat can use registered services while shared rooms and other use
   assert.equal((await member('/api/rooms/'+personal.id)).status,404);
   assert.equal((await member('/api/rooms')).data.rooms.some(r=>r.personal),false);
   const shared=(await admin('/api/rooms',{name:'shared'})).data.room;
+  assert.equal((await admin('/api/rooms/'+shared.id+'/preferences',{pinned:true,archived:true})).status,200);
+  const saved=(await admin('/api/rooms')).data.rooms.find(r=>r.id===shared.id);
+  assert.equal(saved.pinned,true);assert.equal(saved.archived,true);
+  assert.equal((await member('/api/rooms/'+shared.id+'/preferences',{pinned:false,archived:false})).status,404);
+  assert.equal((await admin('/api/rooms/'+shared.id+'/preferences',{pinned:false,archived:false})).status,200);
+
   for(const r of [personal,shared]){
    assert.equal((await admin('/api/rooms/'+r.id+'/messages',{text:'메일 확인',botIds:['bot-analyst'],clientNonce:r.id})).status,202);
    let messages=[];

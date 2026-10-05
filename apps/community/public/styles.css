@@ -1218,3 +1218,8 @@ button:active:not(:disabled) { filter:brightness(.9); }
 .quick-model-option[aria-pressed="true"] { background:#ffffff0b; color:#d0e1f7; }
 .quick-model-more { margin-top:5px; font-size:12px; color:#adbccd; }
 .quick-model-more:hover { background:#ffffff0a; }
+
+.room-icon { background:transparent; border-radius:9px; color:#a9afb8; }
+.room-icon .icon { width:20px; height:20px; }
+.avatar-bot { background:transparent; color:#c4cad3; }
+.deleted-rooms-toggle { margin:12px 8px; padding:8px; color:#9399a3; background:transparent; border:0; font-size:12px; }

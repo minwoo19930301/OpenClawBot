@@ -263,23 +263,39 @@ async function loadRooms() {
       } catch {}
       const requested = new URLSearchParams(window.location.search).get("room");
       await selectRoom(
-        state.rooms.some((room) => room.id === requested)
+        state.rooms.some((room) => room.id === requested && !room.archived)
           ? requested
-          : state.rooms.some((room) => room.id === last)
+          : state.rooms.some((room) => room.id === last && !room.archived)
             ? last
-            : state.rooms[0].id,
+            : (state.rooms.find(room=>!room.archived) || state.rooms[0]).id,
       );
     }
   } catch (error) {
     toast(error.message);
   }
 }
+let showDeletedRooms=false;
+async function updateRoomListPreference(room, changes) {
+  try {
+    const prefs=await api("/api/rooms/"+room.id+"/preferences",{method:"POST",body:JSON.stringify({pinned:!!room.pinned,archived:!!room.archived,...changes})});
+    Object.assign(room,prefs);
+    if(prefs.archived && state.selectedRoom===room.id) {
+      const next=state.rooms.find(r=>!r.archived);
+      if(next) await selectRoom(next.id); else showEmpty();
+    }
+    if(prefs.archived) {
+      state.extra=state.extra.filter(p=>p.roomId!==room.id);
+      renderExtraPanes();
+    }
+    renderRooms();
+  } catch(error) { toast(error.message); }
+}
 function renderRooms() {
   els.roomList.replaceChildren();
   const query = $("#room-search").value.trim().toLocaleLowerCase();
   const visibleRooms = state.rooms.filter((room) =>
-    (room.name + " " + room.description).toLocaleLowerCase().includes(query),
-  );
+    !!room.archived === showDeletedRooms && (room.name + " " + room.description).toLocaleLowerCase().includes(query),
+  ).sort((a,b)=>Number(!!b.pinned)-Number(!!a.pinned));
   if (query && !visibleRooms.length) {
     const empty = document.createElement("p");
     empty.className = "search-empty";
@@ -296,11 +312,11 @@ function renderRooms() {
     button.dataset.roomId = room.id;
     const roomIcon = document.createElement("span");
     roomIcon.className = "room-icon";
-    roomIcon.append(icon("people"));
+    roomIcon.append(icon(room.id===MONITOR_ROOM ? "activity" : room.personal ? "spark" : "chat"));
     const copy = document.createElement("span");
     copy.className = "room-item-copy";
     const name = document.createElement("strong");
-    name.textContent = room.name;
+    name.textContent = (room.pinned ? "· " : "") + room.name;
     const meta = document.createElement("small");
     meta.textContent = `${room.memberCount || 0}명 · ${room.description || "공동 대화"}`;
     copy.append(name, meta);
@@ -312,6 +328,11 @@ function renderRooms() {
     });
     els.roomList.append(button);
   });
+  const trash=document.createElement("button");
+  trash.className="deleted-rooms-toggle";
+  trash.textContent=showDeletedRooms ? "← 대화 목록" : "삭제한 대화"+(state.rooms.some(r=>r.archived)?" ("+state.rooms.filter(r=>r.archived).length+")":"");
+  trash.onclick=()=>{showDeletedRooms=!showDeletedRooms;renderRooms();};
+  els.roomList.append(trash);
 }
 function showEmpty() {
   state.selectedRoom = null;
@@ -468,7 +489,7 @@ function createMessage(message) {
   if(message.id && Date.now()-message.createdAt<15000 && !animatedMessages.has(message.id)){article.classList.add("message-enter");animatedMessages.add(message.id);if(animatedMessages.size>500)animatedMessages.delete(animatedMessages.values().next().value);}
   const avatar = document.createElement("div");
   avatar.className = `avatar ${message.kind === "bot" ? "avatar-bot" : ""}`;
-  if (message.kind === "bot") avatar.append(icon("bot"));
+  if (message.kind === "bot") avatar.append(icon("spark"));
   else avatar.textContent = initials(message.author);
   const body = document.createElement("div");
   body.className = "message-body";
@@ -1464,8 +1485,21 @@ function setupDock() {
     event.preventDefault();menu.replaceChildren();
     const action=document.createElement("button");action.type="button";action.setAttribute("role","menuitem");action.textContent="Split view로 열기";
     action.onclick=()=>begin(room?.dataset.dockRoom || dockRoomAt(Number(panel.dataset.dockIndex)));menu.append(action);
+    const targetRoom=state.rooms.find(r=>r.id===(room?.dataset.dockRoom || dockRoomAt(Number(panel.dataset.dockIndex))));
+    if(targetRoom) {
+      const addAction=(label,handler)=>{const b=document.createElement("button");b.type="button";b.setAttribute("role","menuitem");b.textContent=label;b.onclick=()=>{menu.hidden=true;handler();};menu.append(b);};
+      addAction(targetRoom.pinned?"고정 해제":"상단에 고정",()=>updateRoomListPreference(targetRoom,{pinned:!targetRoom.pinned}));
+      addAction(targetRoom.archived?"대화 복원":"대화 삭제",()=>{
+        if(targetRoom.archived) return updateRoomListPreference(targetRoom,{archived:false});
+        const dialog=document.createElement("dialog");dialog.className="quick-model-picker";
+        const text=document.createElement("p");text.textContent="내 대화 목록에서 삭제할까요? 삭제한 대화에서 복원할 수 있으며 다른 참여자의 대화는 유지됩니다.";
+        const confirm=document.createElement("button");confirm.textContent="삭제";confirm.onclick=()=>{dialog.close();updateRoomListPreference(targetRoom,{archived:true});};
+        const cancel=document.createElement("button");cancel.textContent="취소";cancel.onclick=()=>dialog.close();
+        dialog.append(text,confirm,cancel);dialog.onclose=()=>dialog.remove();document.body.append(dialog);dialog.showModal();
+      });
+    }
     const reset=document.createElement("button");reset.type="button";reset.setAttribute("role","menuitem");reset.textContent="분할 닫기";reset.onclick=()=>{state.layout=2;setLayout(2);dockRects=[{x:0,y:0,w:1,h:1}];applyDockLayout();hide();};menu.append(reset);
-    Object.assign(menu.style,{left:Math.min(event.clientX,innerWidth-200)+"px",top:Math.min(event.clientY,innerHeight-100)+"px"});menu.hidden=false;action.focus();
+    Object.assign(menu.style,{left:Math.min(event.clientX,innerWidth-200)+"px",top:Math.min(event.clientY,innerHeight-210)+"px"});menu.hidden=false;action.focus();
   });
   document.addEventListener("pointerdown",event=>{if(!menu.contains(event.target))menu.hidden=true;});
   document.addEventListener("keydown",event=>{if(event.key==="Escape"){pendingDock=null;hide();}});

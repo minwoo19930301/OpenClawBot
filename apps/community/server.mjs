@@ -848,7 +848,7 @@ export async function startCommunity(options = {}) {
             "SELECT r.*,m.role member_role FROM rooms r JOIN room_members m ON r.id=m.room_id WHERE m.user_id=? ORDER BY r.created_at DESC",
           )
           .all(user.id)
-          .map(roomView);
+          .map(room => ({...roomView(room), ...JSON.parse(db.prepare("SELECT value FROM settings WHERE key=?").get("room-ui:"+user.id+":"+room.id)?.value || "{}")}));
         return reply(res, 200, {
           rooms,
           bots: BOTS,
@@ -911,10 +911,16 @@ export async function startCommunity(options = {}) {
         return reply(res, 200, { room: roomView(room) });
       }
       const match = url.pathname.match(
-        /^\/api\/rooms\/([a-f0-9-]{36})(?:\/(messages|invites))?$/,
+        /^\/api\/rooms\/([a-f0-9-]{36})(?:\/(messages|invites|preferences))?$/,
       );
       if (!match) throw failure(404, "찾을 수 없습니다.");
       const room = roomFor(match[1], user);
+      if (match[2] === "preferences" && method === "POST") {
+        if (typeof body.pinned !== "boolean" || typeof body.archived !== "boolean") throw failure(400,"대화 설정이 올바르지 않습니다.");
+        const preferences={pinned:body.pinned,archived:body.archived};
+        db.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run("room-ui:"+user.id+":"+room.id,JSON.stringify(preferences));
+        return reply(res,200,preferences);
+      }
       if (!match[2] && method === "GET") {
         const messages = db
             .prepare(

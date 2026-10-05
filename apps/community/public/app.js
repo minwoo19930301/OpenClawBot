@@ -113,38 +113,16 @@ const toast = (message) => {
   );
 };
 const initials = (name) => (name || "?").trim().slice(0, 1).toUpperCase();
-const crewRoles=[
-  {id:"bot-creative",kind:"builder",name:"건설자",job:"설계 · 만들기"},
-  {id:"bot-analyst",kind:"worker",name:"워커",job:"조사 · 실행"},
-  {id:"bot-reviewer",kind:"doctor",name:"닥터",job:"점검 · 검토"}
-];
-function crewCharacter(kind="worker") {
-  const figure=document.createElement("span");figure.className="crew-character crew-"+kind;figure.setAttribute("aria-hidden","true");
-  for(const part of ["shadow","body","arm left","arm right","head","hat","badge"]) {const el=document.createElement("i");el.className="crew-"+part;figure.append(el);}
-  return figure;
-}
-function renderCrew() {
-  let crew=$("#crew");
-  if(!crew){crew=document.createElement("section");crew.id="crew";crew.className="crew";crew.setAttribute("aria-label","나의 크루");els.roomList.before(crew);}
-  crew.replaceChildren();
-  const title=document.createElement("p");title.className="crew-title";title.textContent="나의 크루";crew.append(title);
-  const cards=document.createElement("div");cards.className="crew-cards";
-  for(const role of crewRoles) {
-    const button=document.createElement("button");button.className="crew-card";button.type="button";
-    button.setAttribute("aria-label",role.name+" · "+role.job);button.setAttribute("aria-pressed",String(state.selectedBots.includes(role.id)));
-    button.append(crewCharacter(role.kind));
-    const name=document.createElement("strong");name.textContent=role.name;
-    const job=document.createElement("small");job.textContent=role.job;button.append(name,job);
-    button.onclick=()=>{state.selectedBots=[role.id];state.botChoiceTouched=true;renderBotPicker();renderCrew();};
-    cards.append(button);
-  }
-  crew.append(cards);
-  const links=document.createElement("div");links.className="crew-workspaces";
+function renderAgentLinks() {
+  let links=$("#agent-workspaces");
+  if(!links){links=document.createElement("div");links.id="agent-workspaces";links.className="agent-workspaces";els.roomList.before(links);}
+  links.replaceChildren();
   for(const room of state.rooms.filter(r=>!r.archived&&(r.personal||r.id===MONITOR_ROOM))) {
-    const button=document.createElement("button");button.textContent=room.personal?"비서 작업실":"닥터 · 서버 상태";
+    const button=document.createElement("button");button.type="button";
+    button.append(icon("agent"));
+    const label=document.createElement("span");label.textContent=room.personal?"Agent Bot":"서버 상태";button.append(label);
     button.onclick=()=>selectRoom(room.id);links.append(button);
   }
-  crew.append(links);
 }
 function icon(name) {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -323,7 +301,7 @@ async function updateRoomListPreference(room, changes) {
   } catch(error) { toast(error.message); }
 }
 function renderRooms() {
-  renderCrew();
+  renderAgentLinks();
   els.roomList.replaceChildren();
   const query = $("#room-search").value.trim().toLocaleLowerCase();
   const visibleRooms = state.rooms.filter((room) =>
@@ -345,7 +323,7 @@ function renderRooms() {
     button.dataset.roomId = room.id;
     const roomIcon = document.createElement("span");
     roomIcon.className = "room-icon";
-    roomIcon.append(icon(room.id===MONITOR_ROOM ? "activity" : room.personal ? "spark" : "chat"));
+    roomIcon.append(icon("agent"));
     const copy = document.createElement("span");
     copy.className = "room-item-copy";
     const name = document.createElement("strong");
@@ -506,7 +484,7 @@ function renderRoom(data) {
     row.append(avatar, copy);
     els.memberList.append(row);
   });
-  $("#crew")?.classList.toggle("is-working",!!data.busy);
+  els.roomView.classList.toggle("agent-working",!!data.busy);
   if (data.busy) {
     els.sendingStatus.textContent = "봇이 답변을 준비하고 있어요…";
     els.sendingStatus.classList.add("is-visible");
@@ -525,7 +503,7 @@ function createMessage(message) {
   if(message.id && Date.now()-message.createdAt<15000 && !animatedMessages.has(message.id)){article.classList.add("message-enter");animatedMessages.add(message.id);if(animatedMessages.size>500)animatedMessages.delete(animatedMessages.values().next().value);}
   const avatar = document.createElement("div");
   avatar.className = `avatar ${message.kind === "bot" ? "avatar-bot" : ""}`;
-  if (message.kind === "bot") avatar.append(crewCharacter(/건설|아이디어/.test(message.author)?"builder":/닥터|검토|모니터/.test(message.author)?"doctor":"worker"));
+  if (message.kind === "bot") avatar.append(icon("agent"));
   else avatar.textContent = initials(message.author);
   const body = document.createElement("div");
   body.className = "message-body";
@@ -612,7 +590,7 @@ function renderBotPicker() {
     const desc = document.createElement("small");
     desc.textContent = bot.description || "";
     copy.append(name, desc);
-    label.append(checkbox, crewCharacter(crewRoles.find(r=>r.id===bot.id)?.kind), copy);
+    label.append(checkbox, icon("agent"), copy);
     picker.append(label);
   });
   updateBotLabel();

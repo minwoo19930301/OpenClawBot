@@ -581,17 +581,10 @@ function renderBotPicker() {
   updateBotLabel();
 }
 function updateBotLabel() {
-  if (state.selectedRoom === MONITOR_ROOM) {
-    $("#bot-picker-label").textContent = "서버 모니터 · 실측 상태 설명 · AI 호출 없음";
-    return;
-  }
-  const selected = state.selectedBots
-    .map((id) => state.bots.find((bot) => bot.id === id)?.name)
-    .filter(Boolean);
-  $("#bot-picker-label").textContent = selected.length
-    ? (selected.length > 1 ? `AI 응답 · ${selected.length}개 역할` : "AI 응답")
-    : "AI 답변 꺼짐 · 사람끼리 대화";
+  $("#bot-picker-label").textContent = "";
+  $("#bot-picker-label").hidden = true;
 }
+
 function clearPendingAttachments() {
   state.attachmentGeneration += 1;
   state.pendingAttachments.forEach((item) => item.previewUrl && URL.revokeObjectURL(item.previewUrl));

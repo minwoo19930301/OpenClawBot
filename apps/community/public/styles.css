@@ -1223,3 +1223,49 @@ button:active:not(:disabled) { filter:brightness(.9); }
 .room-icon .icon { width:20px; height:20px; }
 .avatar-bot { background:transparent; color:#c4cad3; }
 .deleted-rooms-toggle { margin:12px 8px; padding:8px; color:#9399a3; background:transparent; border:0; font-size:12px; }
+/* Sculpted crew: one family of characters, distinguished by workwear. */
+.crew {padding:8px 12px 16px;border-bottom:1px solid #ffffff0a;margin-bottom:10px}
+.crew-title {font-size:11px;letter-spacing:.08em;color:#8e929c;margin:2px 4px 12px}
+.crew-cards {display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+.crew-card {display:flex;align-items:center;flex-direction:column;gap:5px;padding:9px 2px 10px;border:1px solid transparent;border-radius:15px;background:transparent;min-width:0}
+.crew-card strong {font-size:12px;font-weight:500;color:#dedfe3}
+.crew-card small {font-size:9px;color:#838994;white-space:nowrap}
+.crew-card[aria-pressed=true] {background:linear-gradient(145deg,#30343a,#202226);border-color:#ffffff12}
+.crew-card:hover {background:#ffffff09;transform:translateY(-3px)}
+.crew-workspaces {display:flex;gap:5px;margin-top:12px}
+.crew-workspaces button {font-size:10px;color:#9da5b1;flex:1;padding:7px 3px;background:#ffffff05;border:1px solid #ffffff09;border-radius:8px}
+.crew-character {display:inline-block;position:relative;width:54px;height:64px;flex-shrink:0;isolation:isolate;transform-origin:50% 90%}
+.crew-character i {position:absolute;display:block}
+.crew-shadow {left:9px;bottom:1px;width:38px;height:7px;border-radius:50%;background:#0005;filter:blur(3px)}
+.crew-body {left:16px;top:29px;width:26px;height:29px;border-radius:45% 45% 32% 32%;background:radial-gradient(ellipse at 30% 20%,#fff,#d6d9de 65%,#8d929b);box-shadow:inset -3px -2px 4px #0002}
+.crew-head {left:15px;top:7px;width:28px;height:29px;border-radius:48%;background:radial-gradient(circle at 32% 25%,#fff 10%,#eeeff0 40%,#c3c6cc 75%,#9297a0);box-shadow:1px 3px 5px #0003;z-index:3}
+.crew-arm {top:34px;width:10px;height:23px;border-radius:60%;background:linear-gradient(100deg,#f9fafa,#b5bac2);z-index:2;transform-origin:50% 10%}
+.crew-arm.left {left:9px;transform:rotate(19deg)}
+.crew-arm.right {right:5px;transform:rotate(-24deg)}
+.crew-hat {z-index:4}
+.crew-builder .crew-hat {left:12px;top:4px;width:34px;height:13px;background:linear-gradient(135deg,#ffe7a4,#d1a04a);border-radius:17px 17px 4px 4px;box-shadow:0 3px 0 #be8c38}
+.crew-worker .crew-hat {left:14px;top:5px;width:30px;height:11px;background:linear-gradient(135deg,#c1d1e4,#728ba8);border-radius:14px 14px 3px 3px;box-shadow:5px 4px 0 -1px #7f97b2}
+.crew-worker .crew-body {background:linear-gradient(125deg,#b6c7db,#6d829c)}
+.crew-doctor .crew-hat {left:15px;top:7px;width:28px;height:10px;background:#f1f4f5;border-radius:5px 5px 1px 1px}
+.crew-doctor .crew-hat:after {content:"+";position:absolute;left:11px;top:-4px;color:#77aaa2;font-size:14px;font-weight:700}
+.crew-doctor .crew-badge {z-index:4;left:30px;top:39px;width:6px;height:8px;border:1px solid #7aa69b;border-radius:2px}
+.crew-card:hover .crew-character {animation:crew-greet 850ms cubic-bezier(.2,.8,.2,1)}
+.crew-card[aria-pressed=true] .crew-character {animation:crew-breathe 4s ease-in-out infinite}
+.crew-card:hover .crew-arm.right {animation:crew-wave 600ms ease-in-out 2}
+.avatar-bot {width:38px;height:44px;overflow:visible}
+.avatar-bot .crew-character {transform:scale(.65);transform-origin:top left}
+.bot-option .crew-character {width:54px;margin-right:8px}
+.pane-close {position:absolute;right:9px;top:9px;z-index:8;width:27px;height:27px;padding:0;border-radius:8px;border:1px solid #ffffff16;background:#25272be8;color:#abb2bf;font-size:21px;line-height:22px;cursor:pointer}
+.pane-close:hover {background:#444951;color:white}
+.pane-bar {padding-right:44px}
+.pane-grid.docked > .room-view {transition:left 420ms cubic-bezier(.22,1,.36,1),top 420ms cubic-bezier(.22,1,.36,1),width 420ms cubic-bezier(.22,1,.36,1),height 420ms cubic-bezier(.22,1,.36,1)}
+.room-item,.crew-card {transition:background 220ms,transform 320ms cubic-bezier(.22,1,.36,1),border-color 220ms}
+.message-enter {animation:soft-arrival 460ms cubic-bezier(.22,1,.36,1) both}
+@keyframes soft-arrival {from{opacity:0;transform:translateY(14px) scale(.985);filter:blur(2px)}to{opacity:1;transform:none;filter:blur(0)}}
+@keyframes crew-breathe {0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
+@keyframes crew-greet {0%,100%{transform:rotate(0)}40%{transform:rotate(-7deg)}70%{transform:rotate(4deg)}}
+@keyframes crew-wave {0%,100%{transform:rotate(-24deg)}50%{transform:rotate(-65deg)}}
+@media(prefers-reduced-motion:reduce){.crew-character,.crew-arm,.message-enter{animation:none!important}.pane-grid.docked>.room-view{transition:none!important}}
+.crew.is-working .crew-card[aria-pressed=true] .crew-arm {animation:crew-work 550ms ease-in-out infinite alternate}
+@keyframes crew-work {from{transform:rotate(-10deg)}to{transform:rotate(-35deg)}}
+@media(prefers-reduced-motion:reduce){.crew.is-working .crew-arm{animation:none!important}}

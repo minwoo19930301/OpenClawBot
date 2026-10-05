@@ -113,6 +113,39 @@ const toast = (message) => {
   );
 };
 const initials = (name) => (name || "?").trim().slice(0, 1).toUpperCase();
+const crewRoles=[
+  {id:"bot-creative",kind:"builder",name:"건설자",job:"설계 · 만들기"},
+  {id:"bot-analyst",kind:"worker",name:"워커",job:"조사 · 실행"},
+  {id:"bot-reviewer",kind:"doctor",name:"닥터",job:"점검 · 검토"}
+];
+function crewCharacter(kind="worker") {
+  const figure=document.createElement("span");figure.className="crew-character crew-"+kind;figure.setAttribute("aria-hidden","true");
+  for(const part of ["shadow","body","arm left","arm right","head","hat","badge"]) {const el=document.createElement("i");el.className="crew-"+part;figure.append(el);}
+  return figure;
+}
+function renderCrew() {
+  let crew=$("#crew");
+  if(!crew){crew=document.createElement("section");crew.id="crew";crew.className="crew";crew.setAttribute("aria-label","나의 크루");els.roomList.before(crew);}
+  crew.replaceChildren();
+  const title=document.createElement("p");title.className="crew-title";title.textContent="나의 크루";crew.append(title);
+  const cards=document.createElement("div");cards.className="crew-cards";
+  for(const role of crewRoles) {
+    const button=document.createElement("button");button.className="crew-card";button.type="button";
+    button.setAttribute("aria-label",role.name+" · "+role.job);button.setAttribute("aria-pressed",String(state.selectedBots.includes(role.id)));
+    button.append(crewCharacter(role.kind));
+    const name=document.createElement("strong");name.textContent=role.name;
+    const job=document.createElement("small");job.textContent=role.job;button.append(name,job);
+    button.onclick=()=>{state.selectedBots=[role.id];state.botChoiceTouched=true;renderBotPicker();renderCrew();};
+    cards.append(button);
+  }
+  crew.append(cards);
+  const links=document.createElement("div");links.className="crew-workspaces";
+  for(const room of state.rooms.filter(r=>!r.archived&&(r.personal||r.id===MONITOR_ROOM))) {
+    const button=document.createElement("button");button.textContent=room.personal?"비서 작업실":"닥터 · 서버 상태";
+    button.onclick=()=>selectRoom(room.id);links.append(button);
+  }
+  crew.append(links);
+}
 function icon(name) {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("class", "icon");
@@ -290,10 +323,11 @@ async function updateRoomListPreference(room, changes) {
   } catch(error) { toast(error.message); }
 }
 function renderRooms() {
+  renderCrew();
   els.roomList.replaceChildren();
   const query = $("#room-search").value.trim().toLocaleLowerCase();
   const visibleRooms = state.rooms.filter((room) =>
-    !!room.archived === showDeletedRooms && (room.name + " " + room.description).toLocaleLowerCase().includes(query),
+    !!room.archived === showDeletedRooms && (showDeletedRooms || (!room.personal && room.id!==MONITOR_ROOM)) && (room.name + " " + room.description).toLocaleLowerCase().includes(query),
   ).sort((a,b)=>Number(!!b.pinned)-Number(!!a.pinned));
   if (query && !visibleRooms.length) {
     const empty = document.createElement("p");
@@ -345,6 +379,7 @@ function showEmpty() {
 async function selectRoom(id) {
   if (!id) return;
   const previous = state.selectedRoom;
+  if(previous!==id && !matchMedia("(prefers-reduced-motion: reduce)").matches) els.roomView.animate([{opacity:.35,transform:"translateY(7px)"},{opacity:1,transform:"translateY(0)"}],{duration:320,easing:"cubic-bezier(.2,.8,.2,1)"});
   state.extra.forEach((pane) => {
     if (pane.roomId === id) pane.roomId = previous && previous !== id ? previous : null;
   });
@@ -408,9 +443,8 @@ async function refreshRoom(force = false) {
     state.roomData = data;
     if (!unchanged) {
       renderRoom(data);
-      els.messages.scrollTop = nearBottom
-        ? els.messages.scrollHeight
-        : scrollTop;
+      if(nearBottom) els.messages.scrollTo({top:els.messages.scrollHeight,behavior:force?"instant":"smooth"});
+      else els.messages.scrollTop=scrollTop;
     }
   } catch (error) {
     if (request !== state.roomRequest) return;
@@ -434,6 +468,7 @@ function stopPolling() {
   state.pollTimer = null;
 }
 function renderRoom(data) {
+  const previousNodes=new Map([...els.messages.children].filter(el=>el.dataset.messageId).map(el=>[el.dataset.messageId,el]));
   els.messages.replaceChildren();
   const messages = data.messages || [];
   if (!messages.length) {
@@ -446,7 +481,7 @@ function renderRoom(data) {
     empty.append(title, note);
     els.messages.append(empty);
   } else
-    messages.forEach((message) => els.messages.append(createMessage(message)));
+    messages.forEach((message) => els.messages.append(previousNodes.get(message.id) || createMessage(message)));
   const members = data.members || [];
   els.memberCount.textContent = members.length;
   els.memberList.replaceChildren();
@@ -471,6 +506,7 @@ function renderRoom(data) {
     row.append(avatar, copy);
     els.memberList.append(row);
   });
+  $("#crew")?.classList.toggle("is-working",!!data.busy);
   if (data.busy) {
     els.sendingStatus.textContent = "봇이 답변을 준비하고 있어요…";
     els.sendingStatus.classList.add("is-visible");
@@ -482,13 +518,14 @@ function renderRoom(data) {
 const animatedMessages = new Set();
 function createMessage(message) {
   const article = document.createElement("article");
+  if(message.id)article.dataset.messageId=message.id;
   const own =
     message.kind === "human" && message.authorId === state.session?.user?.id;
   article.className = `message message-${message.kind}${own ? " message-own" : ""}`;
   if(message.id && Date.now()-message.createdAt<15000 && !animatedMessages.has(message.id)){article.classList.add("message-enter");animatedMessages.add(message.id);if(animatedMessages.size>500)animatedMessages.delete(animatedMessages.values().next().value);}
   const avatar = document.createElement("div");
   avatar.className = `avatar ${message.kind === "bot" ? "avatar-bot" : ""}`;
-  if (message.kind === "bot") avatar.append(icon("spark"));
+  if (message.kind === "bot") avatar.append(crewCharacter(/건설|아이디어/.test(message.author)?"builder":/닥터|검토|모니터/.test(message.author)?"doctor":"worker"));
   else avatar.textContent = initials(message.author);
   const body = document.createElement("div");
   body.className = "message-body";
@@ -575,7 +612,7 @@ function renderBotPicker() {
     const desc = document.createElement("small");
     desc.textContent = bot.description || "";
     copy.append(name, desc);
-    label.append(checkbox, copy);
+    label.append(checkbox, crewCharacter(crewRoles.find(r=>r.id===bot.id)?.kind), copy);
     picker.append(label);
   });
   updateBotLabel();
@@ -1085,6 +1122,8 @@ function renderExtraPanes() {
     row.className = "composer-row";
     const input = document.createElement("textarea");
     input.rows = 1;
+    input.value=pane.draft || "";
+    input.addEventListener("input",()=>{pane.draft=input.value;});
     input.maxLength = 4000;
     input.placeholder = "메시지 보내기. model 이면 목록을 가져옵니다.";
     input.setAttribute("aria-label", (room?.name || "대화") + " 메시지");
@@ -1163,6 +1202,7 @@ async function submitPane(event, index) {
       retryable: true,
     });
     input.value = "";
+    pane.draft = "";
     if (Array.isArray(result.models)) applyModels(result.models);
     await refreshExtra(index);
   } catch (error) {
@@ -1380,12 +1420,29 @@ function applyDockLayout() {
   grid.classList.toggle("docked", dockRects.length > 1);
   dockPanels().forEach((panel, index) => {
     panel.dataset.dockIndex = index;
+    let close=panel.querySelector(":scope > .pane-close");
+    if(dockRects.length>1) {
+      if(!close){close=document.createElement("button");close.className="pane-close";close.type="button";close.textContent="×";panel.append(close);}
+      close.setAttribute("aria-label",(dockRoomAt(index)?state.rooms.find(r=>r.id===dockRoomAt(index))?.name || "대화":"빈")+" 분할 닫기");
+      close.onclick=()=>closeDockPane(index);
+    } else close?.remove();
     const rect = dockRects[index];
     if (rect && dockRects.length > 1) Object.assign(panel.style, {left:rect.x*100+"%", top:rect.y*100+"%", width:rect.w*100+"%", height:rect.h*100+"%", gridColumn:""});
     else for (const key of ["left","top","width","height"]) panel.style[key] = "";
     const handle = index ? panel.querySelector(".pane-bar") : $(".header-identity");
     if (handle) { handle.draggable = false; handle.dataset.dockIndex = index; handle.title = "드래그해서 이동 · 우클릭으로 분할"; }
   });
+}
+async function closeDockPane(index) {
+  if(dockRects.length<2)return;
+  if(index===0 ? $("#message-input").value.trim() : state.extra[index-1]?.draft?.trim()) {toast("작성 중인 메시지를 보내거나 비운 뒤 창을 닫아주세요.");return;}
+  let promote;
+  if(index===0){promote=state.extra.shift();} else state.extra.splice(index-1,1);
+  const count=state.extra.length+1;
+  dockRects=Array.from({length:count},(_,i)=>({x:i/count,y:0,w:1/count,h:1}));
+  state.layout=count;state.focusPane=0;$("#pane-grid").dataset.panes=String(count);
+  if(promote?.roomId) await selectRoom(promote.roomId);
+  renderExtraPanes();renderRooms();applyDockLayout();
 }
 function dockRoomAt(index) { return index === 0 ? state.selectedRoom : state.extra[index-1]?.roomId; }
 function dockZone(panel, event) {

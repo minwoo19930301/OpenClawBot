@@ -32,18 +32,18 @@ const MAX_BODY = 32768;
 const BOTS = [
   {
     id: "bot-analyst",
-    name: "분석가",
+    name: "워커",
     description: "질문을 나누고 근거와 선택지를 정리합니다.",
   },
   {
     id: "bot-creative",
-    name: "아이디어",
+    name: "건설자",
     description: "새로운 접근과 구체적인 실행안을 제안합니다.",
   },
   {
     id: "bot-reviewer",
-    name: "검토자",
-    description: "앞선 의견의 허점과 확인할 점을 짚습니다.",
+    name: "닥터",
+    description: "시스템과 작업 결과의 문제를 점검하고 개선안을 제안합니다. 의료 진료 역할은 아닙니다.",
   },
 ];
 const hash = (value) => createHash("sha256").update(value).digest("hex");

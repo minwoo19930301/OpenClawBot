@@ -394,6 +394,7 @@ export async function startCommunity(options = {}) {
     controllers.add(controller);
     let runtime, jobDir;
     let calls = 0;
+    const turnReplies=[];
     try {
       jobDir = await mkdtemp(join(dataDir, "job-"));
       const sharedContext = db
@@ -431,7 +432,8 @@ export async function startCommunity(options = {}) {
                   "이 방에 공개된 대화:\n" +
                   sharedContext +
                   "\n\n" +
-                  request.user.slice(-8000),
+                  "마지막 사용자 메시지에 직접 답하세요. 침묵하거나 pass하지 마세요." +
+                  (turnReplies.length ? "\n이번 요청에 대한 다른 봇의 답변:\n"+turnReplies.join("\n").slice(-4000) : ""),
                 isolation: { userId, roomId: room.id, botId: agentId },
               },
               AbortSignal.any([
@@ -457,9 +459,12 @@ export async function startCommunity(options = {}) {
         memberIds: selected,
         isSharedRoom: true,
         isCurrent: () => calls < selected.length && !controller.signal.aborted,
-        onMemberMessage: (member, content) =>
-          insertMessage(room.id, "bot", member.name, content),
+        onMemberMessage: (member, content) => {
+          turnReplies.push(member.name+": "+content);
+          insertMessage(room.id, "bot", member.name, content);
+        },
       });
+      if(!turnReplies.length && !closing)insertMessage(room.id,"system","안내","모델이 답변을 반환하지 않았습니다. 다시 시도하거나 다른 모델을 선택해 주세요.");
     } catch {
       if (!closing)
         insertMessage(

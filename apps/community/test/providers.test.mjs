@@ -82,3 +82,8 @@ test('HF token aliases and provider failover exclude cooled keys and paid auto r
  assert.equal(pool.choose('','').attempts.some(p=>p.slot===choice.slot),false);
  assert.equal(pool.choose('paid-model','').provider,'openrouter');
 });
+
+test('explicit model prefers its direct provider over a paid router duplicate',async()=>{
+ const pool=createProviderPool({GROQ_API_KEY:'groq',OPENROUTER_API_KEY:'router'},async()=>modelsResponse(['qwen/test']));
+ await pool.listModels();for(let i=0;i<5;i++)assert.deepEqual(pool.choose('qwen/test','').attempts.map(p=>p.provider),['groq']);
+});

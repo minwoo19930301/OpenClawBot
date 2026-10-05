@@ -288,3 +288,13 @@ test("model picker catalog requires login and loads without a chat command", asy
   assert.equal(value.models[0].id, "test-chat-model");
   assert.equal(JSON.stringify(value).includes("private-test-key"), false);
 });
+
+test('a requested bot gets the user conversation without group silence instructions and never disappears silently',async t=>{
+ const {app,llm,calls}=await fixture();t.after(()=>app.close());
+ llm.complete=async request=>{calls.push(request);return 'SendMessage: {"type":"text","content":"[[pass]]"}';};
+ const c=client(app);await register(c);const id=await createRoom(c,'silence-regression');
+ await c.request(`/api/rooms/${id}/messages`,{text:'hello-qwen',botIds:['bot-analyst'],clientNonce:'silence-test'});
+ let result;for(let i=0;i<50;i++){result=await room(c,id);if(result.messages.some(m=>m.kind==='system'))break;await new Promise(r=>setTimeout(r,10));}
+ assert.equal(calls.length,1);assert.match(calls[0].user,/hello-qwen/);assert.doesNotMatch(calls[0].user,/\[\[pass\]\]|Respond with the message/);
+ assert.ok(result.messages.some(m=>m.kind==='system'&&m.text.includes('답변을 반환하지')));
+});

@@ -130,7 +130,7 @@ export function createProviderPool(env = {}, fetchImpl = fetch) {
   }
   function choose(modelId, effort) {
     const selected = typeof modelId === "string" && /^[\w.:/@+-]{1,200}$/.test(modelId) ? modelId : "";
-    const candidates = providers.flatMap(provider => {
+    let candidates = providers.flatMap(provider => {
       if ((cooldowns.get(provider.slot) || 0) > Date.now()) return [];
       const listed = catalogs.get(provider.slot);
       const configured = env[provider.name.toUpperCase() + "_MODEL"] || env.COMMUNITY_LLM_MODEL;
@@ -141,6 +141,7 @@ export function createProviderPool(env = {}, fetchImpl = fetch) {
         (ids.includes(configured) ? configured : ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "gemini-3.8-flash", "gemini-3.5-flash", "gemini-2.5-flash", "command-a-03-2025"].find(id => ids.includes(id)) || ids.sort()[0]);
       return model ? [{...provider, model, effort: EFFORTS.includes(effort) ? effort : "", provider: provider.name}] : [];
     });
+    if(selected && !selected.endsWith(":free") && candidates.some(p=>p.provider!=="openrouter"))candidates=candidates.filter(p=>p.provider!=="openrouter");
     if (!candidates.length) return null;
     const start = cursor++ % candidates.length;
     const ordered = [...candidates.slice(start), ...candidates.slice(0, start)];

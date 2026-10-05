@@ -930,6 +930,11 @@ function applyModels(models) {
     for(const model of visible)select.append(new Option(modelLabel(model)+(model===current&&!recommended.includes(model)?" · 선택됨":""),model.value));
     select.value=visible.some(model=>model.value===chosen)?chosen:"";
     select.dataset.chosen=select.value;
+    if(!select._triggerButton){
+      const trigger=document.createElement("button");trigger.type="button";trigger.className="model-trigger";trigger.setAttribute("aria-label","모델 선택");trigger.setAttribute("aria-haspopup","dialog");
+      trigger.onclick=()=>openRecommendedModels(select,trigger);select.after(trigger);select._triggerButton=trigger;select.classList.add("custom-model-select");
+    }
+    select._triggerButton.textContent=(select.selectedOptions[0]?.textContent||"자동 선택 · 추천")+" ▾";
     select.title="추천 모델 · 자동 선택은 연결 상태에 따라 순환합니다";
     if(!select._moreButton){
       const more=document.createElement("button");more.type="button";more.className="model-more";more.textContent="더 보기";
@@ -939,6 +944,18 @@ function applyModels(models) {
     }
     select._moreButton.disabled=!state.models.length;
   }
+}
+function openRecommendedModels(select,trigger){
+  const dialog=document.createElement("dialog");dialog.className="quick-model-picker";dialog.setAttribute("aria-label","추천 모델 선택");
+  const title=document.createElement("h2");title.textContent="추천 모델";dialog.append(title);
+  const entries=[{value:"",id:"",name:"자동 선택 · 추천"},...recommendedModels(state.models)];
+  const current=state.models.find(m=>m.value===select.value);if(current&&!entries.some(m=>m.value===current.value))entries.push(current);
+  for(const model of entries){const button=document.createElement("button");button.type="button";button.className="quick-model-option";button.textContent=(model.value?modelLabel(model):model.name)+(select.value===model.value?" ✓":"");button.setAttribute("aria-pressed",String(select.value===model.value));button.onclick=()=>{if(select.isConnected){select.dataset.chosen=model.value;applyModels(state.models);select.dispatchEvent(new Event("change",{bubbles:true}));}dialog.close();};dialog.append(button);}
+  const more=document.createElement("button");more.type="button";more.className="quick-model-more";more.textContent="전체 모델 검색 →";more.onclick=()=>{dialog.close();openModelBrowser(select,trigger);};dialog.append(more);
+  const close=document.createElement("button");close.type="button";close.className="quick-model-more";close.textContent="닫기";close.onclick=()=>dialog.close();dialog.append(close);
+  dialog.onclose=()=>{dialog.remove();if(trigger.isConnected)trigger.focus();};
+  dialog.addEventListener("click",event=>{if(event.target===dialog){const r=dialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)dialog.close();}});
+  document.body.append(dialog);dialog.showModal();
 }
 let modelBrowser;
 function openModelBrowser(select,trigger) {

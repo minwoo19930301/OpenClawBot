@@ -46,3 +46,8 @@ References:
 - [Google Chrome download and supported platforms](https://support.google.com/chrome/answer/95346?co=GENIE.Platform%3DDesktop&hl=en)
 - [Chromium Linux sandboxing](https://chromium.googlesource.com/chromium/src/+/main/docs/linux_sandboxing.md)
 - [OCI Container Instances overview](https://docs.oracle.com/en-us/iaas/Content/container-instances/overview-of-container-instances.htm)
+
+## Common workspace with separate views
+When explicitly configured with COMMUNITY_SHARED_DESKTOP_ROOM=<existing mapped room UUID>, authenticated members of any room use that existing desktop. This is intentional shared workspace access: browser login state and files are common to its users. Room membership, session-bound one-use tickets and origin checks still apply. Service API secrets are not copied into the desktop.
+
+Enable COMMUNITY_DESKTOP_VIEWS=1 only after deploying the updated desktop entrypoint. Browser, Files and Terminal use three independent X displays in the same container and /home/desktop; switching the file view does not replace the browser screen. Websocket ports 6080–6082 are internal only. No additional public ports, privileged mode, sandbox bypass or VM is needed. Existing containers must be recreated with their current mounts and network configuration preserved; rebuilding the app alone does not enable these views.

@@ -97,7 +97,7 @@ test("desktop ticket is CSRF/member/origin/session bound and proxies binary fram
   const admin = await register(app, "desktop_admin");
   const origin = app.url;
   const status = await desktopRequest(app, `/api/rooms/${room}/desktop`, { cookie: admin.cookie, csrf: admin.csrf, origin });
-  assert.deepEqual(status.data, { configured: true, available: true, browserEnabled: true });
+  assert.deepEqual(status.data, { configured: true, available: true, browserEnabled: true, shared:false, views:["browser"] });
   const csrfBlocked = await desktopRequest(app, `/api/rooms/${room}/desktop/ticket`, { method: "POST", cookie: admin.cookie, csrf: "wrong", origin });
   assert.equal(csrfBlocked.response.status, 403);
   const ticketResult = await desktopRequest(app, `/api/rooms/${room}/desktop/ticket`, { method: "POST", cookie: admin.cookie, csrf: admin.csrf, origin });
@@ -151,4 +151,15 @@ test("hub issueTicket requires configured desktop", () => {
   const hub = createDesktopHub({ server, desktops: new Map(), userFor: () => null, roomFor: () => {}, originFor: () => "http://local" });
   assert.throws(() => hub.issueTicket({ id: "u", sessionHash: "s" }, id()), /OCI/);
   hub.close();
+});
+
+test("explicit shared workspace resolves all chat views to one internal desktop",()=>{
+ const primary=id(),other=id();
+ const source=JSON.stringify({[primary]:{wsUrl:"ws://desktop-"+primary+":6080/",cdpUrl:"http://desktop-"+primary+":9222/"}});
+ const desktops=parseDesktops(source,{sharedRoomId:primary,multiView:true});
+ assert.equal(desktops.sharedRoomId,primary);
+ assert.equal(desktops.get(other),desktops.get(primary));
+ assert.deepEqual(desktops.get(other).views,["browser","files","terminal"]);
+ assert.equal(desktops.has(other),true);
+ assert.throws(()=>parseDesktops(source,{sharedRoomId:other}),/existing configured/);
 });

@@ -30,9 +30,10 @@ const loadRFB = async () => {
   return module.default || module.RFB || module;
 };
 
-export function createDesktopUI({ api, getRoomId, toast = () => {} }) {
+export function createDesktopUI({ api, getRoomId, toast = () => {}, mount = null, initialView = "browser", onViewChange = () => {} }) {
   const state = {
     roomId: null,
+    view:initialView,
     request: 0,
     status: null,
     rfb: null,
@@ -40,7 +41,7 @@ export function createDesktopUI({ api, getRoomId, toast = () => {} }) {
     generation: 0,
     viewOnly: true,
   };
-  const topbar = document.querySelector(".topbar-actions");
+  const topbar = mount?.querySelector(".pane-bar") || document.querySelector(".topbar-actions");
   const button = document.createElement("button");
   button.type = "button";
   button.className = "icon-button desktop-button";
@@ -50,7 +51,7 @@ export function createDesktopUI({ api, getRoomId, toast = () => {} }) {
   topbar?.append(button);
 
   const panel = document.createElement("aside");
-  panel.className = "desktop-panel";
+  panel.className = "desktop-panel"+(mount?" desktop-inline":"");
   panel.setAttribute("aria-label", "OCI 데스크톱");
   panel.hidden = true;
   const head = document.createElement("div");
@@ -90,8 +91,12 @@ export function createDesktopUI({ api, getRoomId, toast = () => {} }) {
   const sharedNote = document.createElement("p");
   sharedNote.className = "desktop-status";
   sharedNote.textContent = "이 대화의 참여자가 같은 화면을 보고 조종합니다.";
-  panel.append(head, status, preview, controls, sharedNote);
-  document.body.append(panel);
+  const viewPicker=document.createElement("select");viewPicker.className="desktop-view-picker";viewPicker.setAttribute("aria-label","컴퓨터 화면 선택");
+  for(const [value,label] of [["browser","브라우저"],["files","파일"],["terminal","터미널"]]){const option=document.createElement("option");option.value=value;option.textContent=label;viewPicker.append(option);}
+  viewPicker.value=state.view;viewPicker.disabled=true;
+  viewPicker.onchange=()=>{state.view=viewPicker.value;onViewChange(state.view);disconnect();if(dialog.open)hideDialog();connect(preview,true);};
+  panel.append(head, viewPicker, status, preview, controls, sharedNote);
+  (mount || document.body).append(panel);
 
   const dialog = document.createElement("dialog");
   dialog.className = "desktop-dialog";
@@ -138,6 +143,7 @@ export function createDesktopUI({ api, getRoomId, toast = () => {} }) {
     disconnect();
     preview.replaceChildren(previewMessage);
     previewMessage.textContent = "OCI 데스크톱을 확인하는 중…";
+    viewPicker.disabled = true;
     control.disabled = true;
     fullscreen.disabled = true;
     setStatus("");
@@ -149,7 +155,7 @@ export function createDesktopUI({ api, getRoomId, toast = () => {} }) {
     state.connecting = true;
     setStatus("연결 중…");
     try {
-      const ticket = await api(`/api/rooms/${encodeURIComponent(roomId)}/desktop/ticket`, { method: "POST", body: "{}" });
+      const ticket = await api(`/api/rooms/${encodeURIComponent(roomId)}/desktop/ticket`, { method: "POST", body: JSON.stringify({view:state.view}) });
       if (roomId !== state.roomId || generation !== state.generation) { return; }
       const ticketUrl = new URL(ticket.websocketPath, window.location.href);
       const expectedPath = `/api/rooms/${encodeURIComponent(roomId)}/desktop/ws`;
@@ -221,7 +227,7 @@ export function createDesktopUI({ api, getRoomId, toast = () => {} }) {
     resetView();
     if (!roomId) return;
     try {
-      setStatus("전용 데스크톱 준비 중… 처음에는 잠시 걸릴 수 있습니다.");
+      setStatus("OCI 작업 환경 연결 중…");
       let data = await api(`/api/rooms/${encodeURIComponent(roomId)}/desktop/start`, {method:"POST",body:"{}"});
       for (let attempt=0; !data.available && attempt<20; attempt++) {
         await new Promise(resolve=>setTimeout(resolve,1000));
@@ -230,6 +236,10 @@ export function createDesktopUI({ api, getRoomId, toast = () => {} }) {
       }
       if (request !== state.request || roomId !== state.roomId) return;
       state.status = data;
+      viewPicker.disabled=!data.available;
+      sharedNote.textContent=data.shared ? "공통 OCI 컴퓨터 · 파일 공간은 같고 선택한 화면만 다릅니다." : "이 대화의 OCI 작업 환경";
+      for(const option of viewPicker.options)option.disabled=!(data.views || ["browser"]).includes(option.value);
+      if(!(data.views || ["browser"]).includes(state.view)){state.view="browser";viewPicker.value="browser";}
       if (!data.configured) {
         previewMessage.textContent = "OCI 데스크톱이 연결되지 않았습니다.";
         setStatus("사용할 수 없음");
@@ -279,11 +289,12 @@ export function createDesktopUI({ api, getRoomId, toast = () => {} }) {
   // Do not handle close by closing again: an old queued close event can destroy
   // a newly opened connection when switching from preview to control.
 
-  document.addEventListener("visibilitychange", () => {
+  const onVisibility = () => {
     if (document.hidden) disconnect();
     else if (dialog.open && state.roomId) openDialog(false);
     else if (!panel.hidden && state.roomId) refreshStatus();
-  });
+  };
+  document.addEventListener("visibilitychange",onVisibility);
 
   return {
     openRoom(roomId) { this.setRoom(roomId); openPanel(); },
@@ -293,14 +304,15 @@ export function createDesktopUI({ api, getRoomId, toast = () => {} }) {
       state.roomId = roomId || null;
       state.generation += 1;
       state.status = null;
-      if (roomId === "00000000-0000-4000-8000-000000000001" || !roomId) {
+      if (!roomId) {
         panel.hidden = true;
         button.hidden = true;
         return;
       }
       button.hidden = false;
-      if (!panel.hidden) refreshStatus();
+      openPanel();
     },
+    destroy() { this.reset();document.removeEventListener("visibilitychange",onVisibility);panel.remove();dialog.remove();button.remove(); },
     reset() {
       state.request += 1;
       state.generation += 1;

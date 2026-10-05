@@ -46,4 +46,23 @@ browser_pid=$!
 socat "TCP-LISTEN:$cdp_port,bind=0.0.0.0,reuseaddr,fork" TCP:127.0.0.1:9223 >/run/desktop/socat.log 2>&1 &
 cdp_pid=$!
 
+
+# Separate views share this container's home and network, not another VM.
+# Browser stays on :99; Files and Terminal get independent X displays.
+for view in files terminal; do
+  if [ "$view" = files ]; then view_display=:100; view_vnc=5901; view_ws=6081; else view_display=:101; view_vnc=5902; view_ws=6082; fi
+  Xvfb "$view_display" -screen 0 "$screen" -nolisten tcp -ac >/run/desktop/"$view"-xvfb.log 2>&1 &
+  n=0
+  until xdpyinfo -display "$view_display" >/dev/null 2>&1; do
+    n=$((n+1)); [ "$n" -lt 50 ] || exit 1; sleep 0.1
+  done
+  DISPLAY="$view_display" openbox >/run/desktop/"$view"-openbox.log 2>&1 &
+  x11vnc -display "$view_display" -rfbport "$view_vnc" -localhost -forever -shared -nopw -quiet >/run/desktop/"$view"-vnc.log 2>&1 &
+  websockify --web=/usr/share/novnc "$view_ws" "127.0.0.1:$view_vnc" >/run/desktop/"$view"-ws.log 2>&1 &
+  if [ "$view" = files ]; then
+    DISPLAY="$view_display" pcmanfm --no-desktop /home/desktop >/run/desktop/files.log 2>&1 &
+  else
+    DISPLAY="$view_display" xterm -fa Monospace -fs 12 -geometry 110x36 -title "OCI Workspace" >/run/desktop/terminal.log 2>&1 &
+  fi
+done
 wait "$browser_pid"

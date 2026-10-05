@@ -1076,7 +1076,7 @@ function setLayout(count) {
 function renderExtraPanes() {
   const grid = $("#pane-grid");
   const spans = { 5: [2, 2, 2, 3, 3], 7: [3, 3, 3, 3, 4, 4, 4] }[state.layout];
-  $$(".extra-pane", grid).forEach((pane) => pane.remove());
+  $$(".extra-pane", grid).forEach((pane) => {pane._desktop?.destroy();pane.remove();});
   $("#room-view").style.gridColumn = spans ? "span " + spans[0] : "";
   state.extra.forEach((pane, index) => {
     Object.assign(pane, roomPreferences(pane.roomId));
@@ -1099,7 +1099,7 @@ function renderExtraPanes() {
     desktopButton.textContent = "컴퓨터";
     desktopButton.disabled = !pane.roomId;
     desktopButton.addEventListener("click", () => desktopUI?.openRoom(pane.roomId));
-    header.append(desktopButton);
+
     const list = document.createElement("div");
     list.className = "message-list";
     const messages = pane.data?.messages || [];
@@ -1143,6 +1143,8 @@ function renderExtraPanes() {
     form.append(controls, row);
     section.append(header, list, form);
     grid.append(section);
+    section._desktop=createDesktopUI({api,getRoomId:()=>pane.roomId,toast,mount:section,initialView:pane.desktopView || "browser",onViewChange:view=>{pane.desktopView=view;}});
+    section._desktop.setRoom(pane.roomId);
   });
   applyModels(state.models);
   applyDockLayout();

@@ -162,7 +162,7 @@ export async function startCommunity(options = {}) {
     (demo ? new DemoLlm() : directLlm);
   const configured = Boolean(llm);
   const push = createPushService({ db, env, sendImpl: options.pushSendImpl });
-  const desktops = parseDesktops(env.COMMUNITY_DESKTOP_MAP);
+  const desktops = parseDesktops(env.COMMUNITY_DESKTOP_MAP,{sharedRoomId:env.COMMUNITY_SHARED_DESKTOP_ROOM,multiView:env.COMMUNITY_DESKTOP_VIEWS==="1"});
   const fixedDesktops = new Set(desktops.keys());
   const provisioner = createProvisioner(env.COMMUNITY_PROVISIONER_SOCKET, desktops);
   const browserTools = options.browserTools ?? createBrowserTools({ desktops });
@@ -719,16 +719,16 @@ export async function startCommunity(options = {}) {
       const desktopMatch = url.pathname.match(/^\/api\/rooms\/([a-f0-9-]{36})\/desktop(?:\/(ticket|start))?$/);
       if (desktopMatch) {
         const room = roomFor(desktopMatch[1], user);
-        if (room.id === MONITOR_ROOM) throw failure(409, "모니터링 방은 데스크톱을 만들지 않습니다.");
+
         if (method === "POST" && desktopMatch[2] === "start") {
           limit("desktop-start:"+user.id,10);
-          if (!fixedDesktops.has(room.id)) await provisioner.ensure(room.id);
+          if (!desktops.sharedRoomId && !fixedDesktops.has(room.id)) await provisioner.ensure(room.id);
           return reply(res,200,await desktopHub.status(room.id));
         }
         if (method === "GET" && !desktopMatch[2]) return reply(res,200,await desktopHub.status(room.id));
         if (method === "POST" && desktopMatch[2] === "ticket") {
           limit("desktop:"+user.id,20);
-          return reply(res,201,desktopHub.issueTicket(user,room.id));
+          return reply(res,201,desktopHub.issueTicket(user,room.id,body.view || "browser"));
         }
         throw failure(405,"허용되지 않은 요청입니다.");
       }
@@ -1058,7 +1058,7 @@ export async function startCommunity(options = {}) {
       });
     }
   });
-  desktopHub=createDesktopHub({server,desktops,userFor,roomFor,touch:room=>provisioner.touch(room),originFor:()=>origin||boundOrigin});
+  desktopHub=createDesktopHub({server,desktops,userFor,roomFor,touch:room=>provisioner.touch(desktops.sharedRoomId || room),originFor:()=>origin||boundOrigin});
   server.requestTimeout = 30000;
   server.headersTimeout = 10000;
   await new Promise((done, reject) => {

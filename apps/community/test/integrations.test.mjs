@@ -74,6 +74,8 @@ test('personal chat can use registered services while shared rooms and other use
   }
   assert.equal(executions,1);
   assert.match(requests[0].system,/비밀번호나 인증 코드를 요구하지/);
+  assert.match(requests[0].system,/운영자 비즈니스 지식 베이스/);
+  assert.doesNotMatch(requests[1].system,/운영자 비즈니스 지식 베이스/);
   assert.equal(requests[1].toolDefinitions.some(t=>t.function.name==='read_connected_service'),false);
   assert.equal((await admin('/api/rooms')).data.rooms.filter(r=>r.personal).length,1);
  }finally{await app.close();await rm(dir,{recursive:true,force:true});}

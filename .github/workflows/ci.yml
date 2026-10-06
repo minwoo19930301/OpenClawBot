@@ -3,6 +3,7 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -27,3 +28,41 @@ jobs:
         run: npm test
       - name: Typecheck
         run: npm run typecheck
+      - name: Validate deployment command
+        run: python3 -m unittest discover -s scripts/deploy -p 'test_*.py'
+
+  deploy:
+    needs: verify
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.OCI_DEPLOY_READY == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    concurrency:
+      group: oci-production
+      cancel-in-progress: false
+    environment:
+      name: production
+      url: https://168.107.91.96/
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy tested main commit
+        env:
+          SSH_KEY: ${{ secrets.OCI_DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ vars.OCI_KNOWN_HOSTS }}
+          RELEASE: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          key="$RUNNER_TEMP/oci-deploy-key"
+          hosts="$RUNNER_TEMP/oci-known-hosts"
+          trap 'rm -f "$key" "$hosts"' EXIT
+          printf '%s\n' "$SSH_KEY" > "$key"
+          printf '%s\n' "$KNOWN_HOSTS" > "$hosts"
+          ssh -i "$key" -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$hosts" -o ConnectTimeout=20 \
+            -o ServerAliveInterval=30 -o ServerAliveCountMax=10 \
+            opc@168.107.91.96 "$RELEASE"
+      - name: Verify public HTTPS release and assets
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: python3 scripts/deploy/verify-public.py

@@ -88,8 +88,9 @@ services:
     ports:
       - '127.0.0.1:6080:6080'
       - '127.0.0.1:9222:9222'
+    volumes:
+      - /var/lib/community-shared/home:/home/desktop:Z
     tmpfs:
-      - /home/desktop:size=512m,uid=10001,gid=10001,mode=700
       - /tmp:size=128m,mode=1777
       - /run/desktop:size=32m,uid=10001,gid=10001,mode=700
     mem_limit: 2g

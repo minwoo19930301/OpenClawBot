@@ -45,3 +45,9 @@ Workflow failures are visible in GitHub Actions. A public health check alone
 does not verify model replies or authenticated desktop rendering; validate
 these when those features change. The host verifies actual RFB handshakes for
 all three views on each deployment.
+
+Verified on 2026-10-06: the first rollout restored the previous release when
+its desktop handshake failed. After fixing tmpfs migration and profile ownership,
+all three RFB handshakes, Google Chrome startup and the public HTTPS release
+check passed. CI also verifies that the deployment credential rejects an
+arbitrary `id` command before allowing a release request.

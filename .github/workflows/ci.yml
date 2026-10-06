@@ -58,10 +58,17 @@ jobs:
           trap 'rm -f "$key" "$hosts"' EXIT
           printf '%s\n' "$SSH_KEY" > "$key"
           printf '%s\n' "$KNOWN_HOSTS" > "$hosts"
-          ssh -i "$key" -o BatchMode=yes -o StrictHostKeyChecking=yes \
-            -o UserKnownHostsFile="$hosts" -o ConnectTimeout=20 \
-            -o ServerAliveInterval=30 -o ServerAliveCountMax=10 \
-            opc@168.107.91.96 "$RELEASE"
+          args=(-i "$key" -o BatchMode=yes -o StrictHostKeyChecking=yes
+                -o UserKnownHostsFile="$hosts" -o ConnectTimeout=20
+                -o ServerAliveInterval=30 -o ServerAliveCountMax=10)
+          if ssh "${args[@]}" opc@168.107.91.96 id > "$RUNNER_TEMP/deploy-boundary-check" 2>&1; then
+            echo 'Deployment key unexpectedly permits arbitrary commands.'
+            exit 1
+          fi
+          grep -q 'Expected a full lowercase Git commit SHA' "$RUNNER_TEMP/deploy-boundary-check"
+          rm -f "$RUNNER_TEMP/deploy-boundary-check"
+          echo 'Restricted deployment key verified.'
+          ssh "${args[@]}" opc@168.107.91.96 "$RELEASE"
       - name: Verify public HTTPS release and assets
         env:
           EXPECTED_SHA: ${{ github.sha }}

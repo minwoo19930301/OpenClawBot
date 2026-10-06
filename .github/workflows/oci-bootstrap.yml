@@ -1,0 +1,42 @@
+name: OCI deployment setup
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        type: choice
+        required: true
+        options: [inspect, install]
+permissions:
+  contents: read
+concurrency:
+  group: oci-production
+  cancel-in-progress: false
+jobs:
+  setup:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Connect using the temporary bootstrap credential
+        env:
+          SSH_KEY: ${{ secrets.OCI_BOOTSTRAP_SSH_KEY }}
+          KNOWN_HOSTS: ${{ vars.OCI_KNOWN_HOSTS }}
+          OPERATION: ${{ inputs.operation }}
+          DEPLOY_PUBLIC_KEY: ${{ vars.OCI_DEPLOY_PUBLIC_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          key="$RUNNER_TEMP/oci-bootstrap-key"
+          hosts="$RUNNER_TEMP/oci-known-hosts"
+          trap 'rm -f "$key" "$hosts"' EXIT
+          printf '%s\n' "$SSH_KEY" > "$key"
+          printf '%s\n' "$KNOWN_HOSTS" > "$hosts"
+          args=(-i "$key" -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$hosts" -o ConnectTimeout=20)
+          if [ "$OPERATION" = inspect ]; then
+            ssh "${args[@]}" opc@168.107.91.96 'sudo -n python3 -' < scripts/deploy/inspect.py
+          else
+            scp "${args[@]}" scripts/deploy/release.py scripts/deploy/install.sh opc@168.107.91.96:/home/opc/
+            printf '%s\n' "$DEPLOY_PUBLIC_KEY" | ssh "${args[@]}" opc@168.107.91.96 'sudo -n bash /home/opc/install.sh'
+          fi

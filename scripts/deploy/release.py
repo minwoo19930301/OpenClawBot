@@ -156,9 +156,15 @@ def deploy(sha):
                 if not any(m['Destination']=='/home/desktop' for m in mounts):
                     run('docker','pause',DESKTOP_CONTAINER)
                     try:
-                        run('docker','cp','-a',DESKTOP_CONTAINER+':/home/desktop/.','/var/lib/community-shared/home/')
+                        # docker cp can expose the underlying image instead of a
+                        # tmpfs. Read the paused process's actual mount namespace.
+                        pid=run('docker','inspect',DESKTOP_CONTAINER,'--format','{{.State.Pid}}',capture=True).strip()
+                        if not pid.isdigit() or int(pid)<1:
+                            raise RuntimeError('Cannot locate paused desktop namespace')
+                        run('cp','-a','/proc/'+pid+'/root/home/desktop/.','/var/lib/community-shared/home/')
                     finally:
                         run('docker','unpause',DESKTOP_CONTAINER)
+                run('chown','-hR','-P','10001:10001','/var/lib/community-shared/home')
                 run('docker','stop','--time','20',DESKTOP_CONTAINER)
                 # Chrome's hostname lock cannot survive replacement of its container.
                 for name in ['SingletonLock','SingletonSocket','SingletonCookie']:

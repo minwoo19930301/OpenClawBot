@@ -40,13 +40,4 @@ if ! grep -Fq "$root/home.ext4 " /etc/fstab; then
   printf '%s/home.ext4 %s/home ext4 loop,nodev,nosuid,nofail,x-systemd.automount 0 0\n' "$root" "$root" >> /etc/fstab
 fi
 systemctl daemon-reload
-desktop=community-desktop-4bc4b8f0-1789-4afb-a927-e7adbcc7b9b9-1
-if [ ! -e "$root/.migrated" ]; then
-  docker pause "$desktop" >/dev/null
-  trap 'docker unpause "$desktop" >/dev/null 2>&1 || true' EXIT
-  docker cp -a "$desktop:/home/desktop/." "$root/home/"
-  docker unpause "$desktop" >/dev/null
-  trap - EXIT
-  touch "$root/.migrated"
-fi
 echo 'Restricted deployment command and bounded shared desktop storage installed.'

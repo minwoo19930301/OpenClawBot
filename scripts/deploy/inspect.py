@@ -27,7 +27,7 @@ if subprocess.run(['docker','image','inspect',candidate],stdout=subprocess.DEVNU
             '--security-opt','seccomp=/home/opc/community/apps/community/deploy/desktop/seccomp-chromium.json',
             '--shm-size','128m','--volume','/var/lib/community-shared/home:/home/desktop:Z',
             '--tmpfs','/tmp:size=128m,mode=1777','--tmpfs','/run/desktop:size=32m,uid=10001,gid=10001,mode=700',
-            '--entrypoint','/bin/sh',candidate,'-c','/usr/local/bin/desktop-entrypoint; result=$?; cat /run/desktop/xvfb.log /run/desktop/chromium.log; exit "$result"')
+            '--entrypoint','/bin/sh',candidate,'-c','id; echo HOME=$HOME; stat -c "%u %g %a %n" /home/desktop /home/desktop/.config /home/desktop/.config/google-chrome; df -h /home/desktop; mkdir -p "$HOME/.config/google-chrome/Crash Reports"; touch /home/desktop/.deploy-probe && rm /home/desktop/.deploy-probe; /usr/local/bin/desktop-entrypoint; result=$?; cat /run/desktop/xvfb.log /run/desktop/chromium.log; exit "$result"')
         time.sleep(8)
         print('candidate state:',run('docker','inspect',name,'--format','{{json .State}}'))
         subprocess.run(['docker','logs','--tail','25',name])

@@ -170,6 +170,8 @@ def deploy(sha):
             verify(sha)
         except BaseException:
             print('Deployment failed; restoring previous app and desktop images.',flush=True)
+            subprocess.run(['docker','logs','--tail','25',DESKTOP_CONTAINER])
+            subprocess.run(['docker','inspect',DESKTOP_CONTAINER,'--format','{{json .State}}'])
             (DEPLOY/'compose.yml').write_bytes(old_compose)
             (DEPLOY/'.env.production').write_bytes(old_env)
             (DEPLOY/'.env.production').chmod(0o600)
@@ -181,6 +183,15 @@ def deploy(sha):
             raise
         state.write_text(new_desktop_hash+'\n')
         Path('/var/lib/community-shared/deployed-release').write_text(sha+'\n')
+        # Only retire this deployer's immutable tags; preserve current/previous
+        # images, operator backup tags, other projects and every running image.
+        for line in run('docker','image','ls','--format','{{.Repository}} {{.Tag}}',capture=True).splitlines():
+            repository, tag = line.split()
+            if (repository in ['community-app','community-desktop']
+                    and re.fullmatch(r'[0-9a-f]{40}',tag)
+                    and tag not in [sha,previous_release]):
+                subprocess.run(['docker','image','rm',repository+':'+tag],
+                               stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
         print('DEPLOYED '+sha,flush=True)
 
 if __name__ == '__main__':

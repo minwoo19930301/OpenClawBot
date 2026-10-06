@@ -18,7 +18,10 @@ The host validates current `main` against the fixed repository, downloads an
 immutable source archive, rejects archive traversal/links, builds before
 replacement, backs up SQLite using its backup API, and keeps `:previous` image
 tags. It preserves server-only environment files, the application data volume,
-and personal Telegram/OpenClaw services. Failed rollout/health checks restore
+and personal Telegram/OpenClaw services.
+Current and previous release tags are retained; older generated SHA tags are
+retired after success. Operator backup tags and unrelated images are untouched.
+Failed rollout/health checks restore
 the previous app and desktop images/config. Public HTTPS verification also
 checks the expected release and the served frontend assets.
 

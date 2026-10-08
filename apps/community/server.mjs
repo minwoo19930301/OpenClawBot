@@ -559,6 +559,7 @@ export async function startCommunity(options = {}) {
           "/pwa.js": ["pwa.js", "text/javascript"],
           "/sw.js": ["sw.js", "text/javascript"],
           "/manifest.webmanifest": ["manifest.webmanifest", "application/manifest+json"],
+          "/icons/agent-bot-v2.png": ["icons/agent-bot-v2.png", "image/png"],
           "/icons/icon-192.svg": ["icons/icon-192.svg", "image/svg+xml"],
           "/icons/icon-512.svg": ["icons/icon-512.svg", "image/svg+xml"],
           "/icons/icon-192.png": ["icons/icon-192.png", "image/png"],

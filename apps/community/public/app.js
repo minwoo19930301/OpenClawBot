@@ -125,6 +125,15 @@ function renderAgentLinks() {
   }
 }
 function icon(name) {
+  if (name === "agent" || name === "spark") {
+    const image = document.createElement("img");
+    image.className = "icon agent-art";
+    image.src = "/icons/agent-bot-v2.png";
+    image.alt = "";
+    image.setAttribute("aria-hidden", "true");
+    image.draggable = false;
+    return image;
+  }
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("class", "icon");
   svg.setAttribute("aria-hidden", "true");

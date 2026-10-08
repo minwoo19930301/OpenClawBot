@@ -156,18 +156,21 @@ function switchAuth(tab) {
   (login ? $("#login-username") : $("#register-display")).focus();
 }
 async function loadSession() {
+  const startup = $("#startup-view");
+  $("#startup-retry").classList.add("is-hidden");
+  $("#startup-status").textContent = "내 공간을 불러오고 있어요";
   try {
-    state.session = await api("/api/session");
+    state.session = await api("/api/session", { signal: AbortSignal.timeout(15000) });
     if (state.session.user) await enterWorkspace();
     else showAuth();
+    startup.classList.add("is-ready");
+    setTimeout(() => startup.classList.add("is-hidden"), 300);
   } catch {
-    showAuth();
-    showMessage(
-      els.authMessage,
-      "서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.",
-    );
+    $("#startup-status").textContent = "연결이 잠시 늦어지고 있어요. 다시 시도해주세요.";
+    $("#startup-retry").classList.remove("is-hidden");
   }
 }
+$("#startup-retry").addEventListener("click", loadSession);
 function showAuth() {
   cancelActiveRecording();
   pwaUI?.setSession(null);

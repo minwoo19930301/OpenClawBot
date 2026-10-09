@@ -7,6 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <meta name="description" content="초대 기반 공동 봇 대화" />
+    <link rel="preload" href="/icons/agent-bot-v2.png" as="image">
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icons/icon-192.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
@@ -70,7 +71,7 @@
     </svg>
     <div id="app">
       <section id="startup-view" class="startup-view" aria-label="OpenClawBot 불러오는 중">
-        <img class="icon agent-art startup-logo" src="/icons/agent-bot-v2.png" alt="" width="96" height="96" fetchpriority="high">
+        <img class="icon agent-art startup-logo" src="/icons/agent-bot-v2.png" alt="" width="96" height="96" fetchpriority="high" decoding="sync">
         <strong>OpenClawBot</strong>
         <p id="startup-status" role="status">내 공간을 불러오고 있어요</p>
         <button id="startup-retry" class="is-hidden" type="button">다시 시도</button>
@@ -228,7 +229,6 @@
                 <strong id="profile-name">사용자</strong
                 ><span id="profile-role"></span>
               </div>
-              <a id="integrations-link" class="text-button is-hidden" href="/integrations">연결 서비스</a>
               <button id="logout-button" class="text-button" type="button">
                 로그아웃
               </button>

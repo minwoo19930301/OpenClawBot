@@ -1282,3 +1282,9 @@ button:active .agent-art { transform:scale(.94); }
 @media(prefers-reduced-motion:reduce) {
   .agent-art,.startup-view strong,.startup-view p,.auth-panel { animation:none!important; transition:none!important; transform:none!important; }
 }
+
+/* Show the startup artwork still, without entrance or floating effects. */
+.startup-view .startup-logo,.startup-view strong,.startup-view p { animation:none!important; transform:none!important; }
+
+.startup-logo { visibility:hidden; }
+.startup-logo.is-decoded { visibility:visible; }

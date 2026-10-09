@@ -170,7 +170,7 @@ async function loadSession() {
   $("#startup-status").textContent = "내 공간을 불러오고 있어요";
   try {
     state.session = await api("/api/session", { signal: AbortSignal.timeout(15000) });
-    if (state.session.user) await enterWorkspace();
+    if (state.session.user) void enterWorkspace().catch(() => toast("대화 목록을 불러오지 못했습니다. 새로고침해주세요."));
     else showAuth();
     startup.classList.add("is-ready");
     setTimeout(() => startup.classList.add("is-hidden"), 300);
@@ -235,7 +235,6 @@ async function enterWorkspace() {
   $("#profile-avatar").textContent = initials(
     user.displayName || user.username,
   );
-  $("#integrations-link").classList.toggle("is-hidden", user.role !== "admin");
   $("#site-invite-button").classList.toggle("is-hidden", user.role !== "admin");
   const model = state.session.model || {};
   els.demoBadge.classList.toggle("is-hidden", !model.demo);
@@ -1402,6 +1401,8 @@ function bind() {
 bind();
 pwaUI = createPwaController({ api, getSession: () => state.session, toast });
 desktopUI = createDesktopUI({ api, getRoomId: () => state.selectedRoom, toast });
+const startupArtwork = document.querySelector(".startup-logo");
+startupArtwork.decode().then(() => startupArtwork.classList.add("is-decoded")).catch(() => {});
 loadSession();
 
 

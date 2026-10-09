@@ -30,8 +30,8 @@ self.addEventListener("push", (event) => {
     body: typeof payload.body === "string" ? payload.body : "",
     tag: typeof payload.tag === "string" ? payload.tag : undefined,
     data: { url: safeUrl(payload.url) },
-    icon: "/icons/icon-192.png",
-    badge: "/icons/icon-192.png",
+    icon: "/icons/app-logo-v3-192.png",
+    badge: "/icons/app-logo-v3-192.png",
   };
   event.waitUntil(self.registration.showNotification(title, options));
 });

@@ -376,6 +376,7 @@ async function selectRoom(id) {
     if (pane.roomId === id) pane.roomId = previous && previous !== id ? previous : null;
   });
   state.selectedRoom = id;
+  clearThinking(els.sendingStatus);
   const prefs = roomPreferences(id);
   $("#model-select").dataset.chosen = prefs.model || "";
   $("#effort-select").value = prefs.effort || "";
@@ -384,6 +385,7 @@ async function selectRoom(id) {
     sessionStorage.setItem("community-room:" + state.session.user.id, id);
   } catch {}
   state.roomData = null;
+  syncProgressStreams();
   cancelActiveRecording();
   clearPendingAttachments();
   desktopUI?.setRoom(id);
@@ -473,6 +475,7 @@ async function refreshRoom(force = false) {
       return;
     const unchanged = JSON.stringify(state.roomData) === JSON.stringify(data);
     state.roomData = data;
+    syncProgressStreams();
     if (!unchanged) {
       renderRoom(data);
       if(nearBottom) els.messages.scrollTo({top:els.messages.scrollHeight,behavior:force?"instant":"smooth"});
@@ -483,13 +486,20 @@ async function refreshRoom(force = false) {
     if (error.status === 401) {
       state.session = null;
       showAuth();
-    } else toast(error.message);
+    } else {
+      if (error.status === 403 || error.status === 404) {
+        state.roomData = null;
+        syncProgressStreams();
+        clearThinking(els.sendingStatus);
+      }
+      toast(error.message);
+    }
   } finally {
     if (request === state.roomRequest) state.pollBusy = false;
   }
 }
 function startPolling() {
-  stopPolling();
+  if (state.pollTimer) clearInterval(state.pollTimer);
   state.pollTimer = setInterval(() => {
     refreshRoom();
     refreshExtras();
@@ -498,6 +508,7 @@ function startPolling() {
 function stopPolling() {
   if (state.pollTimer) clearInterval(state.pollTimer);
   state.pollTimer = null;
+  stopProgressStreams();
 }
 function renderRoom(data) {
   if(data.room) {const room=state.rooms.find(r=>r.id===data.room.id);if(room&&room.name!==data.room.name){room.name=data.room.name;els.roomTitle.textContent=room.name;renderRooms();}}
@@ -542,12 +553,149 @@ function renderRoom(data) {
   });
   els.roomView.classList.toggle("agent-working",!!data.busy);
   if (data.busy) {
-    els.sendingStatus.textContent = "봇이 답변을 준비하고 있어요…";
-    els.sendingStatus.classList.add("is-visible");
-  } else {
-    els.sendingStatus.textContent = "";
-    els.sendingStatus.classList.remove("is-visible");
+    els.messages.append(thinkingRow());
+    clearThinking(els.sendingStatus);
+  } else if (!state.sending) {
+    clearThinking(els.sendingStatus);
   }
+}
+// Public execution milestones only: labels come from actual server operations.
+const progressStreams = new Map();
+function visibleProgressRooms() {
+  const visible = new Map();
+  if (state.session?.user && state.selectedRoom && state.selectedRoom !== MONITOR_ROOM && state.roomData?.busy)
+    visible.set(state.selectedRoom, state.roomData);
+  for (const pane of state.extra) {
+    if (state.session?.user && pane.roomId && pane.data?.room?.id === pane.roomId && pane.data.busy)
+      visible.set(pane.roomId, pane.data);
+  }
+  return visible;
+}
+function stopProgressStreams() {
+  for (const entry of progressStreams.values()) entry.source?.close();
+  progressStreams.clear();
+  clearThinking(els.sendingStatus);
+}
+function addProgress(entry, event) {
+  if (!event || typeof event.stage !== "string" || typeof event.label !== "string") return;
+  const milestone = { stage: event.stage, label: event.label.slice(0, 240), at: event.at };
+  if (entry.events.some(item => item.stage === milestone.stage && item.label === milestone.label && item.at === milestone.at)) return;
+  entry.events.push(milestone);
+  entry.events.sort((a, b) => (Number(a.at) || 0) - (Number(b.at) || 0));
+  entry.events = entry.events.slice(-40);
+}
+function refreshProgressRoom(roomId) {
+  if (state.selectedRoom === roomId) void refreshRoom(true);
+  state.extra.forEach((pane, index) => {
+    if (pane.roomId === roomId) void refreshExtra(index);
+  });
+}
+function syncProgressStreams() {
+  const visible = visibleProgressRooms();
+  for (const [roomId, entry] of progressStreams) {
+    if (!visible.has(roomId)) {
+      entry.source?.close();
+      progressStreams.delete(roomId);
+    }
+  }
+  for (const [roomId, data] of visible) {
+    let entry = progressStreams.get(roomId);
+    if (!entry) {
+      entry = { events: [], source: null, retryAt: 0 };
+      progressStreams.set(roomId, entry);
+    }
+    for (const event of Array.isArray(data.progress) ? data.progress : []) addProgress(entry, event);
+    if (!entry.source && Date.now() >= entry.retryAt && typeof EventSource !== "undefined") {
+      const source = new EventSource(`/api/rooms/${encodeURIComponent(roomId)}/progress`);
+      entry.source = source;
+      source.addEventListener("open", () => {
+        if (progressStreams.get(roomId) !== entry || entry.source !== source) return;
+        renderProgressRoom(roomId);
+      });
+      source.addEventListener("progress", event => {
+        if (progressStreams.get(roomId) !== entry || entry.source !== source) return;
+        try { addProgress(entry, JSON.parse(event.data)); } catch { return; }
+        renderProgressRoom(roomId);
+      });
+      source.addEventListener("done", () => {
+        if (progressStreams.get(roomId) !== entry || entry.source !== source) return;
+        source.close();
+        entry.source = null;
+        entry.retryAt = Date.now() + 3000;
+        refreshProgressRoom(roomId);
+      });
+      source.addEventListener("error", () => {
+        if (progressStreams.get(roomId) !== entry || entry.source !== source) return;
+        // Recheck membership/session through the API; polling controls bounded retries.
+        source.close();
+        entry.source = null;
+        entry.retryAt = Date.now() + 6000;
+        renderProgressRoom(roomId);
+        refreshProgressRoom(roomId);
+      });
+    }
+    renderProgressRoom(roomId);
+  }
+}
+function renderProgressRoom(roomId) {
+  for (const target of $$("[data-progress-room]")) {
+    if (target.dataset.progressRoom === roomId) renderProgressTarget(target, roomId);
+  }
+}
+function renderProgressTarget(target, roomId) {
+  const entry = progressStreams.get(roomId);
+  const events = entry?.events || [];
+  const label = events.at(-1)?.label || "진행 상황을 연결하는 중";
+  const line = $(".think-line", target);
+  if (line && line.textContent !== label) line.textContent = label;
+}
+function thinkParts() {
+  const mark = document.createElement("span");
+  mark.className = "think-mark";
+  mark.setAttribute("aria-hidden", "true");
+  for (let i = 0; i < 3; i += 1) mark.append(document.createElement("i"));
+  const line = document.createElement("span");
+  line.className = "think-line";
+  const caret = document.createElement("span");
+  caret.className = "think-caret";
+  caret.setAttribute("aria-hidden", "true");
+  return [mark, line, caret];
+}
+function showThinking(target, fixed, roomId = state.selectedRoom) {
+  target.replaceChildren();
+  target.classList.add("is-visible");
+  const [mark, line, caret] = thinkParts();
+  target.append(mark, line, caret);
+  if (fixed) {
+    delete target.dataset.progressRoom;
+    line.textContent = fixed;
+  } else {
+    target.dataset.progressRoom = roomId;
+    renderProgressTarget(target, roomId);
+  }
+}
+function clearThinking(target) {
+  target.replaceChildren();
+  target.classList.remove("is-visible");
+  delete target.dataset.progressRoom;
+}
+function thinkingRow(roomId = state.selectedRoom) {
+  const article = document.createElement("article");
+  article.className = "message message-bot message-thinking";
+  article.setAttribute("aria-label", "에이전트 진행 상황");
+  const avatar = document.createElement("div");
+  avatar.className = "avatar avatar-bot";
+  avatar.append(icon("spark"));
+  const body = document.createElement("div");
+  body.className = "message-body";
+  const bubble = document.createElement("div");
+  bubble.className = "think-bubble";
+  bubble.dataset.progressRoom = roomId;
+  bubble.append(...thinkParts());
+  renderProgressTarget(bubble, roomId);
+  body.append(bubble);
+  article.append(avatar, body);
+  return article;
 }
 const animatedMessages = new Set();
 function createMessage(message) {
@@ -874,8 +1022,7 @@ async function submitMessage(event) {
   state.sending = true;
   $("#send-button").disabled = true;
   input.disabled = true;
-  els.sendingStatus.textContent = "메시지를 보내는 중…";
-  els.sendingStatus.classList.add("is-visible");
+  showThinking(els.sendingStatus, "메시지를 보내는 중");
   try {
     const result = await api(`/api/rooms/${encodeURIComponent(roomId)}/messages`, {
       method: "POST",
@@ -895,7 +1042,7 @@ async function submitMessage(event) {
     state.sending = false;
     $("#send-button").disabled = false;
     input.disabled = false;
-    if (!state.roomData?.busy) els.sendingStatus.classList.remove("is-visible");
+    if (!state.roomData?.busy) clearThinking(els.sendingStatus);
     input.focus();
   }
 }
@@ -940,7 +1087,25 @@ async function openCapabilityHub() {
   if(!dialog){dialog=document.createElement("dialog");dialog.id="capability-hub";dialog.className="capability-hub";document.body.append(dialog);}
   dialog.replaceChildren();
   const title=document.createElement("h2");title.textContent="통합 관리";
-  const close=document.createElement("button");close.textContent="닫기";close.onclick=()=>dialog.close();dialog.append(title,close);dialog.showModal();
+  const close=document.createElement("button");close.textContent="닫기";close.onclick=()=>dialog.close();dialog.append(title,close);
+  const sessions=document.createElement("section"), sessionTitle=document.createElement("h3"), sessionNote=document.createElement("p"), reset=document.createElement("button");
+  sessionTitle.textContent="대화 세션";
+  sessionNote.textContent="내 대화 목록을 비우고 새 세션을 시작합니다. 기존 기록은 ‘삭제한 대화’에서 복원할 수 있습니다.";
+  reset.textContent="대화 목록 초기화";
+  reset.onclick=async()=>{
+    setBusy(reset,true,"초기화하는 중…");
+    try {
+      const data=await api("/api/sessions/reset",{method:"POST",body:"{}"});
+      dialog.close();
+      stopProgressStreams();
+      if(state.layout>1)setLayout(state.layout);
+      dockRects=[{x:0,y:0,w:1,h:1}];applyDockLayout();
+      showDeletedRooms=false;$("#room-search").value="";$("#message-input").value="";state.pendingSend=null;
+      await loadRooms();await selectRoom(data.room.id);
+      toast(`${data.archived || 0}개 대화를 보관하고 새 세션을 시작했습니다.`);
+    } catch(error){toast(error.message);} finally{setBusy(reset,false);}
+  };
+  sessions.append(sessionTitle,sessionNote,reset);dialog.append(sessions);dialog.showModal();
   try {
     const data=await api("/api/admin/capabilities");
     for(const [name,items] of [["API",[...new Set(data.providers.map(p=>p.name))]],["Vault",data.services.map(s=>`${s.name} · ${s.configured?"키 등록됨":"미등록"}`)],["MCP",["연결된 MCP 서버 없음"]],["스킬",["실행 연결된 스킬 없음"]]]) {
@@ -1126,6 +1291,7 @@ function setLayout(count) {
       button.setAttribute("aria-pressed", "false");
     });
     renderRooms();
+    syncProgressStreams();
     return;
   }
   state.layout = count;
@@ -1149,6 +1315,7 @@ function setLayout(count) {
   refreshExtras();
 }
 function renderExtraPanes() {
+  syncProgressStreams();
   const grid = $("#pane-grid");
   const spans = { 5: [2, 2, 2, 3, 3], 7: [3, 3, 3, 3, 4, 4, 4] }[state.layout];
   $$(".extra-pane", grid).forEach((pane) => {pane._desktop?.destroy();pane.remove();});
@@ -1187,6 +1354,8 @@ function renderExtraPanes() {
       empty.append(note);
       list.append(empty);
     }
+    section.classList.toggle("agent-working", !!pane.data?.busy);
+    if (pane.data?.busy && pane.data.room?.id === pane.roomId) list.append(thinkingRow(pane.roomId));
     const form = document.createElement("form");
     form.className = "composer pane-composer";
     form.addEventListener("submit", (event) => submitPane(event, index));
@@ -1297,8 +1466,10 @@ async function refreshExtra(index) {
   try {
     const data = await api(`/api/rooms/${encodeURIComponent(roomId)}`);
     if (state.extra[index] !== pane || pane.roomId !== roomId || pane.request !== request) return;
-    if(JSON.stringify(pane.data) === JSON.stringify(data))return;
+    const unchanged = JSON.stringify(pane.data) === JSON.stringify(data);
     pane.data = data;
+    syncProgressStreams();
+    if (unchanged) return;
     const section = $$(".extra-pane")[index];
     if (!section) return;
     const list = $(".message-list", section);
@@ -1314,10 +1485,17 @@ async function refreshExtra(index) {
       empty.append(note);
       list.append(empty);
     }
+    section.classList.toggle("agent-working", !!data.busy);
+    if (data.busy) list.append(thinkingRow(roomId));
     if (nearBottom) list.scrollTop = list.scrollHeight;
     $("h2", section).textContent = data.room?.name || "대화";
   } catch (error) {
-    if (pane.request === request && error.status !== 401) toast(error.message);
+    if (pane.request !== request) return;
+    if (error.status === 401) { state.session = null; showAuth(); }
+    else {
+      if (error.status === 403 || error.status === 404) { pane.data = null; syncProgressStreams(); }
+      toast(error.message);
+    }
   } finally {
     if (pane.request === request) pane.busy = false;
   }

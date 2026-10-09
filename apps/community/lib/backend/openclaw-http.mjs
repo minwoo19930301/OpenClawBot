@@ -56,6 +56,7 @@ export class OpenClawHttpAdapter {
       let actions = 0;
       for (let callCount = 0; callCount < 5; callCount += 1) {
       const tools = browser && actions < 4 && callCount < 4 ? BROWSER_TOOL_DEFINITIONS.map((tool) => ({ type: "function", name: tool.function.name, description: tool.function.description, parameters: tool.function.parameters })) : [];
+      request.onProgress?.("model",callCount?"조회 결과 정리 중":"OpenClaw 답변 작성 중");
       const response = await this.fetchImpl(this.endpoint, {
         method: "POST",
         redirect: "error",
@@ -64,6 +65,7 @@ export class OpenClawHttpAdapter {
         body: JSON.stringify({ model: `openclaw/${this.agentId}`, input, max_output_tokens: 512, store: false, tools, tool_choice: tools.length ? "auto" : "none" }),
       });
       if (!response.ok) { await response.body?.cancel?.(); throw new Error("OpenClaw gateway rejected request"); }
+      request.onProgress?.("receiving","응답 수신 중");
       const payload = await readJsonLimited(response, 128 * 1024);
       const calls = Array.isArray(payload?.output) ? payload.output.filter((item) => item?.type === "function_call") : [];
       if (calls.length) {

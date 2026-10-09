@@ -1263,6 +1263,31 @@ button:active:not(:disabled) { filter:brightness(.9); }
 .avatar-bot {width:30px;height:30px;border-radius:9px;background:#ffffff06;color:#b9c5d7}
 .avatar-bot .icon {width:20px;height:20px}
 .bot-option > .icon {width:22px;height:22px;margin-right:8px}
+.agent-working .avatar-bot .icon { animation: icon-write 1.4s ease-in-out infinite; }
+.icon-button:hover .icon,
+.room-item:hover .room-icon .icon,
+.send-button:hover .icon { animation: icon-pop .45s cubic-bezier(.22,1,.36,1); }
+.send-button:hover .icon { animation: icon-send .7s ease-in-out infinite; }
+.record-button.is-recording .icon { animation: icon-write .8s ease-in-out infinite; }
+@keyframes icon-pop { 40% { transform: scale(1.18) rotate(-8deg); } }
+@keyframes icon-send { 50% { transform: translateY(-2px); } }
+@keyframes icon-write { 0%,100% { transform: rotate(0); } 35% { transform: rotate(-10deg) translateY(-1px); } 70% { transform: rotate(8deg); } }
+.sending-status.is-visible { display: flex; align-items: center; gap: 8px; height: auto; min-height: 28px; }
+.think-bubble { display: inline-flex; align-items: center; gap: 8px; min-height: 38px; padding: 8px 12px; border-radius: 16px; background: var(--bot-bubble); color: var(--muted); }
+.think-mark { display: inline-flex; gap: 3px; height: 12px; align-items: flex-end; }
+.think-mark i { width: 4px; height: 4px; border-radius: 50%; background: currentColor; animation: think-bob 1s ease-in-out infinite; }
+.think-mark i:nth-child(2) { animation-delay: .15s; }
+.think-mark i:nth-child(3) { animation-delay: .3s; }
+@keyframes think-bob { 0%,100% { transform: translateY(0); opacity: .35; } 50% { transform: translateY(-4px); opacity: 1; } }
+.think-line { min-width: 0; color: var(--text); overflow-wrap:anywhere; }
+.think-caret,.sending-status > .think-mark { flex-shrink:0; }
+.think-caret { width: 7px; height: 1em; background: currentColor; animation: think-caret 1s steps(1) infinite; }
+@keyframes think-caret { 50% { opacity: 0; } }
+.message-thinking { align-items: flex-end; }
+@media(prefers-reduced-motion:reduce) {
+  .think-mark i,.think-caret,.agent-working .avatar-bot .icon,.icon-button:hover .icon,
+  .room-item:hover .room-icon .icon,.send-button:hover .icon,.record-button.is-recording .icon { animation:none!important; }
+}
 .agent-working .avatar-bot:last-of-type {animation:agent-pulse 2s ease-in-out infinite}
 @keyframes agent-pulse {50%{opacity:.55}}
 @media(prefers-reduced-motion:reduce){.message-enter,.avatar-bot{animation:none!important}.pane-grid.docked>.room-view{transition:none!important}}

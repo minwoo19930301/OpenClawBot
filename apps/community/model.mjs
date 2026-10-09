@@ -29,6 +29,7 @@ export class ApiLlm {
         signal?.throwIfAborted();
         if (attempt>start) await request.beforeAdditionalModelCall?.();
         const candidate=candidates[attempt];
+        request.onProgress?.("model",attempt>start?"다른 모델 연결 중":"답변 작성 중");
         const target=new URL(candidate.baseUrl.replace(/\/+$/, '')+'/chat/completions');
         if(target.protocol!=='https:' && !['localhost','127.0.0.1','[::1]'].includes(target.hostname)) throw new Error('Model endpoint must use HTTPS');
         try {
@@ -56,6 +57,7 @@ export class ApiLlm {
         request.onProviderFailure?.(candidate,status,delay);
         if(attempt===Math.min(candidates.length,8)-1) throw new Error('사용 가능한 모델 한도 또는 인증을 확인해 주세요.');
       }
+      request.onProgress?.("receiving","응답 수신 중");
       const reader=response.body.getReader(),chunks=[];let bytes=0;
       try {for(;;){const result=await reader.read();if(result.done)break;bytes+=result.value.byteLength;if(bytes>131072)throw new Error('Model response too large');chunks.push(Buffer.from(result.value));}}
       finally {await reader.cancel().catch(()=>{});}

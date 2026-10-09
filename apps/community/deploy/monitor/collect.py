@@ -17,8 +17,10 @@ def main():
     filesystems=[]; seen=set()
     for m in mounts:
         source=m['source']
-        if not source.startswith('/dev/') or source.startswith('/dev/loop') or source in seen: continue
-        seen.add(source)
+        if not source.startswith('/dev/') or source.startswith('/dev/loop') : continue
+        device=os.stat(m['target']).st_dev
+        if device in seen: continue
+        seen.add(device)
         st=os.statvfs(m['target']); total=st.f_blocks*st.f_frsize; free=st.f_bavail*st.f_frsize
         filesystems.append(dict(mount=m['target'],totalGiB=gib(total),usedGiB=gib((st.f_blocks-st.f_bfree)*st.f_frsize),freeGiB=gib(free),usedPercent=100*(total-free)/total if total else 0))
     used=sum(f['usedGiB'] for f in filesystems); free=sum(f['freeGiB'] for f in filesystems)

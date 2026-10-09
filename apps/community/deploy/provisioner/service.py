@@ -20,10 +20,10 @@ def ensure(room):
     with LOCK:
         ROOT.mkdir(parents=True,exist_ok=True)
         # Fail closed if the aggregate limit or network guard is missing.
-        if pathlib.Path('/sys/fs/cgroup/community.slice/memory.max').read_text().strip()!='17179869184': raise Capacity('서버 자원 제한을 확인할 수 없습니다.')
+        if pathlib.Path('/sys/fs/cgroup/community.slice/memory.max').read_text().strip()!='max': raise Capacity('서버 자원 제한을 확인할 수 없습니다.')
         guard=run('nft','list','table','inet','community_desktop_guard')
         if '172.30.50.0/28' not in guard or '172.30.50.2' not in guard: raise Capacity('독립 데스크톱 네트워크 보호 설정 확인이 필요합니다.')
-        if pathlib.Path('/sys/fs/cgroup/community.slice/cpu.max').read_text().split()!=['300000','100000']: raise Capacity('CPU 합산 제한 확인이 필요합니다.')
+        if pathlib.Path('/sys/fs/cgroup/community.slice/cpu.max').read_text().split()!=['400000','100000']: raise Capacity('CPU 합산 제한 확인이 필요합니다.')
         entries=sorted(p for p in ROOT.iterdir() if p.is_dir() and ROOM.fullmatch(p.name))
         folder=ROOT/room
         info=state(room)

@@ -202,7 +202,7 @@ export async function startCommunity(options = {}) {
     try {
       const snapshot = await readMonitor(env.COMMUNITY_MONITOR_PATH);
       if (closing) return;
-      const state = !snapshot.available ? "unavailable" : JSON.stringify({ limits: snapshot.limitsVerified === true, disk: snapshot.diskUsedPercent >= 85, memory: snapshot.communityMemoryGiB >= snapshot.communityLimitGiB * .85 });
+      const state = !snapshot.available ? "unavailable" : JSON.stringify({ limits: snapshot.limitsVerified === true, disk: snapshot.diskUsedPercent >= 85 || snapshot.filesystems?.some(f => f.usedPercent >= 85), memory: snapshot.communityMemoryGiB >= snapshot.communityLimitGiB * .85 });
       const old = db.prepare("SELECT value FROM settings WHERE key='monitor_state'").get()?.value;
       if (old !== state) {
         insertMessage(MONITOR_ROOM, "bot", "서버 모니터", explainMonitor(snapshot));

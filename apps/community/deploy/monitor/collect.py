@@ -1,26 +1,29 @@
 #!/usr/bin/python3
-"""Read-only host metrics; atomic snapshot, no credentials or Docker socket exposed."""
+"""Read-only A1 host metrics; physical disks and mounted filesystems counted once."""
 import json, os, pathlib, subprocess, time
 OUT = pathlib.Path('/var/lib/community-monitor')
-def prop(unit, name):
-    return subprocess.check_output(['systemctl','show',unit,'--property='+name,'--value'],text=True,timeout=5).strip()
+def run(*args): return subprocess.check_output(args,text=True,timeout=10).strip()
 def gib(n): return int(n)/1024**3
-def quota(unit):
-    v=prop(unit,'CPUQuotaPerSecUSec')
-    if v.endswith('ms'): return float(v[:-2])/1000
-    if v.endswith('s'): return float(v[:-1])
-    raise ValueError('unlimited quota')
+def cpu():
+    values=list(map(int,pathlib.Path('/proc/stat').read_text().splitlines()[0].split()[1:9]))
+    return sum(values),values[3]+values[4]
 def main():
+    first=cpu(); time.sleep(1); last=cpu()
     mem={k:int(v.strip().split()[0])*1024 for k,v in (line.split(':',1) for line in pathlib.Path('/proc/meminfo').read_text().splitlines())}
-    st=os.statvfs('/'); total=st.f_blocks*st.f_frsize; avail=st.f_bavail*st.f_frsize
-    cpu=quota('community.slice'); personal_cpu=quota('openclaw.service')
-    maximum=gib(prop('community.slice','MemoryMax')); personal_max=gib(prop('openclaw.service','MemoryMax'))
-    # Every community container must actually belong to the shared parent.
-    ids=subprocess.check_output(['docker','ps','-q','--filter','label=com.docker.compose.project=community'],text=True,timeout=5).split()
-    parents=[]
-    for cid in ids:
-        parents.append(subprocess.check_output(['docker','inspect','--format','{{.HostConfig.CgroupParent}}',cid],text=True,timeout=5).strip())
-    s=dict(timestamp=int(time.time()*1000),memoryUsedGiB=gib(mem['MemTotal']-mem['MemAvailable']),memoryTotalGiB=gib(mem['MemTotal']),diskUsedPercent=100*(total-avail)/total,diskFreeGiB=gib(avail),communityMemoryGiB=gib(prop('community.slice','MemoryCurrent')),communityLimitGiB=maximum,communityCpuLimit=cpu,personalLimitGiB=personal_max,personalCpuLimit=personal_cpu,limitsVerified=bool(ids) and all(p=='community.slice' for p in parents) and cpu<=3 and maximum<=16 and personal_cpu<=.5 and personal_max<=2 and prop('community.slice','MemorySwapMax')=='0')
+    blocks=json.loads(run('lsblk','--bytes','--json','--output','NAME,TYPE,SIZE'))['blockdevices']
+    physical=sum(int(b['size']) for b in blocks if b['type']=='disk')
+    allocated=sum(sum(int(p['size']) for p in b.get('children',[]) if p['type']=='part') or int(b['size']) for b in blocks if b['type']=='disk')
+    mounts=json.loads(run('findmnt','--json','--list','--output','SOURCE,TARGET,FSTYPE'))['filesystems']
+    filesystems=[]; seen=set()
+    for m in mounts:
+        source=m['source']
+        if not source.startswith('/dev/') or source.startswith('/dev/loop') or source in seen: continue
+        seen.add(source)
+        st=os.statvfs(m['target']); total=st.f_blocks*st.f_frsize; free=st.f_bavail*st.f_frsize
+        filesystems.append(dict(mount=m['target'],totalGiB=gib(total),usedGiB=gib((st.f_blocks-st.f_bfree)*st.f_frsize),freeGiB=gib(free),usedPercent=100*(total-free)/total if total else 0))
+    used=sum(f['usedGiB'] for f in filesystems); free=sum(f['freeGiB'] for f in filesystems)
+    total=gib(physical); usable=gib(mem['MemTotal'])
+    s=dict(timestamp=int(time.time()*1000),scope='a1-host',cpuCount=os.cpu_count(),cpuUsedPercent=100*(1-(last[1]-first[1])/max(1,last[0]-first[0])),memoryUsedGiB=gib(mem['MemTotal']-mem['MemAvailable']),memoryTotalGiB=usable,diskTotalGiB=total,diskUsedGiB=used,diskUsedPercent=100*used/total,diskFreeGiB=free,diskUnallocatedGiB=gib(max(0,physical-allocated)),filesystems=filesystems,communityMemoryGiB=gib(run('systemctl','show','community.slice','--property=MemoryCurrent','--value')),communityLimitGiB=usable,communityCpuLimit=os.cpu_count(),personalLimitGiB=usable,personalCpuLimit=os.cpu_count(),limitsVerified=pathlib.Path("/sys/fs/cgroup/community.slice/memory.max").read_text().strip()=="max" and pathlib.Path("/sys/fs/cgroup/community.slice/cpu.max").read_text().split()==["400000","100000"])
     OUT.mkdir(mode=0o755,exist_ok=True)
     tmp=OUT/'status.tmp'; tmp.write_text(json.dumps(s)); tmp.chmod(0o644); tmp.replace(OUT/'status.json')
 if __name__=='__main__': main()

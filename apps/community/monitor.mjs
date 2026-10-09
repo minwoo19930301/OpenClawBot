@@ -13,15 +13,14 @@ export async function readMonitor(path) {
 export function explainMonitor(s) {
   if (!s.available) return '모니터링 데이터가 없거나 3분 이상 갱신되지 않았습니다. 정상 상태나 무료 사용 중이라고 판단할 수 없습니다. 운영자의 수집기 확인이 필요합니다.';
   return [
-    `서버 상태 · ${new Date(s.timestamp).toISOString()}`,
-    `호스트 RAM: ${s.memoryUsedGiB.toFixed(2)} / ${s.memoryTotalGiB.toFixed(2)} GiB`,
-    `커뮤니티 전체: RAM ${s.communityMemoryGiB.toFixed(2)} / ${s.communityLimitGiB} GiB, CPU 상한 ${s.communityCpuLimit}개`,
-    `개인 봇 상한: RAM ${s.personalLimitGiB} GiB, CPU ${s.personalCpuLimit}개`,
-    `디스크: ${s.diskUsedPercent.toFixed(1)}% 사용, ${s.diskFreeGiB.toFixed(2)} GiB 여유`,
-    `강제 제한: ${s.limitsVerified === true ? '확인됨' : '확인 실패 — 운영자 점검 필요'}`,
-    s.diskUsedPercent >= 85 ? '주의: 디스크 사용률이 85% 이상입니다. 새 디스크를 자동 구매하지 않습니다.' : '디스크 경고 임계값 미만입니다.',
-    s.communityMemoryGiB >= s.communityLimitGiB * .85 ? '주의: 커뮤니티 메모리가 상한의 85% 이상입니다.' : '커뮤니티 메모리 경고 임계값 미만입니다.',
-    '정기 감시와 이 답변은 규칙 기반이며 AI API를 호출하지 않습니다. 이 봇은 읽기 전용으로 제한을 변경하지 않습니다.',
-    'OCI 청구액은 이 수치로 확인할 수 없습니다. 4 OCPU·24GB는 무료 보장이 아니며, 계정의 무료 한도·디스크·트래픽·모델 API 비용을 별도로 확인해야 합니다.',
+    `A1 전체 상태 · ${new Date(s.timestamp).toLocaleString('ko-KR', {timeZone:'Asia/Seoul'})} (한국 시간)`,
+    s.scope === 'a1-host' ? `CPU: ${s.cpuUsedPercent.toFixed(1)}% / ${s.cpuCount} OCPU` : 'CPU 전체 사용량: 새 수집기 연결 대기',
+    `RAM: ${s.memoryUsedGiB.toFixed(2)} / ${s.memoryTotalGiB.toFixed(2)} GiB 사용 (A1 설정 24GB, OS 인식 용량 기준)`,
+    s.scope === 'a1-host' ? `전체 디스크: ${s.diskUsedGiB.toFixed(2)} / ${s.diskTotalGiB.toFixed(2)} GiB (${s.diskUsedPercent.toFixed(1)}%) 사용` : '전체 디스크: 새 수집기 연결 대기',
+    ...(s.scope === 'a1-host' ? [
+      `파일시스템 사용 가능: ${s.diskFreeGiB.toFixed(2)} GiB · 미할당: ${s.diskUnallocatedGiB.toFixed(2)} GiB`,
+      ...s.filesystems.map(f => `${f.mount}: ${f.usedGiB.toFixed(2)} / ${f.totalGiB.toFixed(2)} GiB · 여유 ${f.freeGiB.toFixed(2)} GiB${f.usedPercent >= 85 ? ' — 공간 부족 주의' : ''}`),
+    ] : []),
+    'OpenClawBot은 A1 전체 CPU·RAM을 OS 및 실행 중인 서비스와 공유합니다.',
   ].join('\n');
 }

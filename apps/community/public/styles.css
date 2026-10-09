@@ -1288,3 +1288,19 @@ button:active .agent-art { transform:scale(.94); }
 
 .startup-logo { visibility:hidden; }
 .startup-logo.is-decoded { visibility:visible; }
+
+/* Live host dashboard replaces the monitor chat transcript. */
+.is-host-dashboard .composer-dock { display:none; }
+.host-dashboard { width:100%; max-width:960px; margin:0 auto; padding:28px 16px; }
+.host-dashboard h2 { font-size:24px; margin:0 0 8px; letter-spacing:-.6px; }
+.host-subtitle { color:var(--muted); font-size:12px; }
+.host-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; margin:24px 0; }
+.host-card,.host-storage { padding:22px; border:1px solid var(--line); border-radius:18px; background:var(--surface); }
+.host-card h3,.host-storage h3 { margin:0 0 16px; font-size:13px; color:var(--muted); font-weight:500; }
+.host-card strong { display:block; font-size:32px; font-weight:600; letter-spacing:-1px; }
+.host-card p { color:var(--muted); min-height:30px; font-size:12px; }
+.host-card progress { width:100%; height:6px; border:0; border-radius:6px; overflow:hidden; accent-color:#a4c6df; }
+.host-card progress::-webkit-progress-bar { background:#ffffff12; }
+.host-card progress::-webkit-progress-value { background:#a4c6df; border-radius:6px; transition:width 400ms ease; }
+.host-filesystem { display:flex; flex-wrap:wrap; gap:12px; justify-content:space-between; padding:14px 0; border-top:1px solid var(--line); }
+.host-warning { color:#e8b879; }

@@ -400,6 +400,7 @@ async function selectRoom(id) {
     els.roomKicker.textContent = room.personal ? "개인 비서 · 연결 서비스" : canInvite ? "방장" : "공동 대화";
     $("#room-invite-button").classList.toggle("is-hidden", !canInvite);
   }
+  els.roomView.classList.toggle("is-host-dashboard", id === MONITOR_ROOM);
   updateBotLabel();
   if (state.layout > 1) {
     renderExtraPanes();
@@ -407,6 +408,40 @@ async function selectRoom(id) {
   }
   await refreshRoom(true);
   startPolling();
+}
+function renderHostDashboard(snapshot) {
+  const panel = document.createElement("section");
+  panel.className = "host-dashboard";
+  const element = (tag, text, className) => { const node=document.createElement(tag); node.textContent=text; if(className)node.className=className; return node; };
+  panel.append(element("h2", "A1 서버 대시보드"), element("p", "4 OCPU · 24GB RAM · 서버 전체 사용량", "host-subtitle"));
+  if (!snapshot.available || snapshot.scope !== "a1-host") {
+    panel.append(element("p", "최신 서버 상태를 받지 못했습니다. 잠시 후 자동으로 다시 확인합니다.", "host-warning"));
+  } else {
+    const format = n => Number(n).toFixed(1);
+    const cards = element("div", "", "host-cards");
+    const metrics = [
+      ["CPU", `${format(snapshot.cpuUsedPercent)}%`, `${snapshot.cpuCount} OCPU 전체`, snapshot.cpuUsedPercent],
+      ["메모리", `${format(snapshot.memoryUsedGiB)} GiB`, `OS 사용 가능 ${format(snapshot.memoryTotalGiB)} GiB / 설정 24GB`, snapshot.memoryUsedGiB / snapshot.memoryTotalGiB * 100],
+      ["전체 디스크", `${format(snapshot.diskUsedPercent)}%`, `${format(snapshot.diskUsedGiB)} / ${format(snapshot.diskTotalGiB)} GiB 사용`, snapshot.diskUsedPercent],
+    ];
+    for (const [label,value,detail,percent] of metrics) {
+      const card=element("article", "", "host-card");
+      card.append(element("h3",label),element("strong",value),element("p",detail));
+      const meter=document.createElement("progress"); meter.max=100; meter.value=Math.min(100,Math.max(0,percent)); meter.setAttribute("aria-label",label+" 사용률");card.append(meter);cards.append(card);
+    }
+    panel.append(cards);
+    const storage=element("section","","host-storage");
+    storage.append(element("h3","디스크 공간"),element("p",`파일시스템 여유 ${format(snapshot.diskFreeGiB)} GiB · 미할당 ${format(snapshot.diskUnallocatedGiB)} GiB`));
+    if(snapshot.diskUnallocatedGiB>1) storage.append(element("p","미할당 공간은 파티션 확장 전까지 파일 저장에 사용할 수 없습니다.","host-subtitle"));
+    for (const fs of snapshot.filesystems) {
+      const row=element("div","","host-filesystem");
+      row.append(element("strong",fs.mount),element("span",`${format(fs.usedGiB)} / ${format(fs.totalGiB)} GiB · 여유 ${format(fs.freeGiB)} GiB`));
+      if(fs.usedPercent>=85) row.append(element("span","공간 부족 주의","host-warning"));
+      storage.append(row);
+    }
+    panel.append(storage,element("p",`최근 측정 ${new Date(snapshot.timestamp).toLocaleString('ko-KR')} · 자동 갱신`,"host-subtitle"));
+  }
+  els.messages.replaceChildren(panel);
 }
 async function refreshRoom(force = false) {
   const roomId = state.selectedRoom,
@@ -421,6 +456,11 @@ async function refreshRoom(force = false) {
     90;
   const scrollTop = els.messages.scrollTop;
   try {
+    if (roomId === MONITOR_ROOM) {
+      const snapshot = await api("/api/admin/monitor");
+      if (state.selectedRoom === roomId && request === state.roomRequest) renderHostDashboard(snapshot);
+      return;
+    }
     const data = await api(`/api/rooms/${encodeURIComponent(roomId)}`);
     if (
       state.selectedRoom !== roomId ||

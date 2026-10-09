@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { BROWSER_TOOL_DEFINITIONS } from "../../browser-tools.mjs";
 import { normalizeBotOutput } from "../../model-output.mjs";
+import { usageEvent } from "../../usage.mjs";
 
 const MAX_TEXT = 8000;
 
@@ -64,9 +65,16 @@ export class OpenClawHttpAdapter {
         headers: { "content-type": "application/json", authorization: `Bearer ${this.token}`, "x-openclaw-agent-id": this.agentId, "x-openclaw-session-key": sessionKey },
         body: JSON.stringify({ model: `openclaw/${this.agentId}`, input, max_output_tokens: 512, store: false, tools, tool_choice: tools.length ? "auto" : "none" }),
       });
-      if (!response.ok) { await response.body?.cancel?.(); throw new Error("OpenClaw gateway rejected request"); }
+      if (!response.ok) {
+        request.onUsage?.(usageEvent({provider:"openclaw",keySlot:request.keySlot,model:`openclaw/${this.agentId}`,status:response.status,headers:response.headers}));
+        await response.body?.cancel?.(); throw new Error("OpenClaw gateway rejected request");
+      }
       request.onProgress?.("receiving","응답 수신 중");
-      const payload = await readJsonLimited(response, 128 * 1024);
+      let payload;
+      try { payload = await readJsonLimited(response, 128 * 1024); }
+      finally {
+        request.onUsage?.(usageEvent({provider:"openclaw",keySlot:request.keySlot,model:typeof payload?.model==="string"?payload.model:`openclaw/${this.agentId}`,status:response.status,headers:response.headers,usage:payload?.usage}));
+      }
       const calls = Array.isArray(payload?.output) ? payload.output.filter((item) => item?.type === "function_call") : [];
       if (calls.length) {
         if (!browser || calls.length > 4 - actions) throw new Error("OpenClaw browser action budget exceeded");

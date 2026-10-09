@@ -1,5 +1,6 @@
 import { BROWSER_TOOL_DEFINITIONS } from './browser-tools.mjs';
 import { normalizeBotOutput } from './model-output.mjs';
+import { usageEvent } from './usage.mjs';
 export class ApiLlm {
   constructor(env) {
     this.name=env.COMMUNITY_LLM_MODEL;
@@ -22,7 +23,7 @@ export class ApiLlm {
     for(let step=0;step<5;step++) {
       if(step) await request.beforeAdditionalModelCall();
       const useTools=Boolean(request.browser) && actions<4 && step<4;
-      let response;
+      let response, activeCandidate;
       const candidates = request.attempts?.length ? request.attempts : [{apiKey:key, model, baseUrl:endpoint.href.replace(/\/chat\/completions$/, '')}];
       const start=candidateIndex;
       for (let attempt=start; attempt<Math.min(candidates.length, 8); attempt++) {
@@ -48,8 +49,9 @@ export class ApiLlm {
           if(attempt===Math.min(candidates.length,8)-1) throw new Error('모든 모델 연결에 실패했습니다. 잠시 후 다시 시도해 주세요.');
           continue;
         }
-        if(response.ok) {candidateIndex=attempt;break;}
+        if(response.ok) {candidateIndex=attempt;activeCandidate=candidate;break;}
         const status=response.status;
+        request.onUsage?.(usageEvent({provider:candidate.provider||candidate.name||'community',keySlot:candidate.slot,model:candidate.model,status,headers:response.headers}));
         const raw=response.headers.get('retry-after');
         const delay=raw ? (Number.isFinite(Number(raw)) ? Number(raw)*1000 : Date.parse(raw)-Date.now()) : 0;
         await response.body?.cancel();
@@ -58,10 +60,16 @@ export class ApiLlm {
         if(attempt===Math.min(candidates.length,8)-1) throw new Error('사용 가능한 모델 한도 또는 인증을 확인해 주세요.');
       }
       request.onProgress?.("receiving","응답 수신 중");
-      const reader=response.body.getReader(),chunks=[];let bytes=0;
-      try {for(;;){const result=await reader.read();if(result.done)break;bytes+=result.value.byteLength;if(bytes>131072)throw new Error('Model response too large');chunks.push(Buffer.from(result.value));}}
-      finally {await reader.cancel().catch(()=>{});}
-      const message=JSON.parse(Buffer.concat(chunks).toString()).choices?.[0]?.message;
+      let payload;
+      try {
+        const reader=response.body.getReader(),chunks=[];let bytes=0;
+        try {for(;;){const result=await reader.read();if(result.done)break;bytes+=result.value.byteLength;if(bytes>131072)throw new Error('Model response too large');chunks.push(Buffer.from(result.value));}}
+        finally {await reader.cancel().catch(()=>{});}
+        payload=JSON.parse(Buffer.concat(chunks).toString());
+      } finally {
+        request.onUsage?.(usageEvent({provider:activeCandidate.provider||activeCandidate.name||'community',keySlot:activeCandidate.slot,model:typeof payload?.model==='string'?payload.model:activeCandidate.model,status:response.status,headers:response.headers,usage:payload?.usage}));
+      }
+      const message=payload.choices?.[0]?.message;
       if(useTools && message?.tool_calls?.length) {
         const calls=message.tool_calls;
         if(!Array.isArray(calls)||calls.length>4-actions)throw new Error('Browser action budget exceeded');

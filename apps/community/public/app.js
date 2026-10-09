@@ -184,6 +184,8 @@ async function loadSession() {
 }
 $("#startup-retry").addEventListener("click", loadSession);
 function showAuth() {
+  closeContextPopover();
+  modelChanges.clear();
   cancelActiveRecording();
   pwaUI?.setSession(null);
   els.auth.classList.remove("is-hidden");
@@ -370,6 +372,7 @@ function showEmpty() {
 }
 async function selectRoom(id) {
   if (!id) return;
+  closeContextPopover();
   const previous = state.selectedRoom;
   if(previous!==id && !matchMedia("(prefers-reduced-motion: reduce)").matches) els.roomView.animate([{opacity:.35,transform:"translateY(7px)"},{opacity:1,transform:"translateY(0)"}],{duration:320,easing:"cubic-bezier(.2,.8,.2,1)"});
   state.extra.forEach((pane) => {
@@ -996,7 +999,7 @@ async function toggleRecording() {
 }
 async function submitMessage(event) {
   event.preventDefault();
-  if (state.sending || !state.selectedRoom) return;
+  if (!state.selectedRoom || roomContextOwner().busy) return;
   const input = $("#message-input"),
     text = input.value.trim();
   const attachments = state.pendingAttachments.filter((item) => item.attachment && !item.error);
@@ -1020,6 +1023,7 @@ async function submitMessage(event) {
     effort: $("#effort-select").value,
   });
   state.sending = true;
+  updateModelAvailability();
   $("#send-button").disabled = true;
   input.disabled = true;
   showThinking(els.sendingStatus, "메시지를 보내는 중");
@@ -1044,6 +1048,7 @@ async function submitMessage(event) {
     input.disabled = false;
     if (!state.roomData?.busy) clearThinking(els.sendingStatus);
     input.focus();
+    updateModelAvailability();
   }
 }
 async function authSubmit(event, endpoint, buttonLabel) {
@@ -1115,25 +1120,158 @@ async function openCapabilityHub() {
     const note=document.createElement("p");note.textContent=data.note;dialog.append(note);
   }catch(error){const note=document.createElement("p");note.textContent=error.message;dialog.append(note);}
 }
-async function sessionAction(action) {
-  const id=state.selectedRoom;if(!id||id===MONITOR_ROOM)return;
-  const button=$(action==="fork"?"#fork-session":"#compact-session");button.disabled=true;
-  try {const data=await api(`/api/rooms/${id}/${action}`,{method:"POST",body:JSON.stringify({})});if(action==="fork"){await loadRooms();await selectRoom(data.room.id);toast("맥락을 이어받은 새 세션을 만들었습니다.");}else{await refreshRoom(true);toast("기록은 보존하고 대화 맥락을 압축했습니다.");}}
-  catch(error){toast(error.message);}finally{button.disabled=false;}
+const modelChanges = new Map();
+function roomContextOwner(pane = null) {
+  const roomId=pane?pane.roomId:state.selectedRoom,data=pane?pane.data:state.roomData;
+  const working=!!(data?.busy||(pane?pane.sending:state.sending));
+  const role=data?.room?.role || state.rooms?.find(room=>room.id===roomId)?.role;
+  return {roomId,data,working,busy:working||modelChanges.has(roomId),canManage:role==="owner"};
 }
-function renderContextMeter(context) {
-  let bar=$("#context-controls");
-  if(!bar){bar=document.createElement("div");bar.id="context-controls";bar.className="context-controls";
-    const fork=document.createElement("button");fork.id="fork-session";fork.textContent="Fork";fork.title="대화 맥락을 이어받는 새 세션";fork.onclick=()=>sessionAction("fork");
-    const compact=document.createElement("button");compact.id="compact-session";compact.textContent="Compact";compact.onclick=()=>sessionAction("compact");
-    const ring=document.createElement("span");ring.id="context-ring";ring.className="context-ring";ring.setAttribute("role","meter");ring.setAttribute("aria-label","대화 컨텍스트 추정 사용률");ring.setAttribute("aria-valuemin","0");ring.setAttribute("aria-valuemax","100");
-    const label=document.createElement("span");label.id="context-label";bar.append(fork,compact,ring,label);$("#composer-form").after(bar);
+function contextOwnerCurrent(roomId, userId, pane = null) {
+  return state.session?.user?.id === userId && (pane ? state.extra.includes(pane) && pane.roomId === roomId : state.selectedRoom === roomId);
+}
+async function refreshContextOwner(pane) {
+  if (pane) await refreshExtra(state.extra.indexOf(pane));
+  else await refreshRoom(true);
+}
+async function sessionAction(action, pane = null, button = null) {
+  const {roomId, busy} = roomContextOwner(pane), userId=state.session?.user?.id;
+  if (!roomId || roomId===MONITOR_ROOM || busy) return;
+  if(action==="compact"&&!roomContextOwner(pane).canManage)return;
+  button ||= $(action==="fork"?"#fork-session":"#compact-session");
+  if (button) button.disabled=true;
+  try {
+    const data=await api(`/api/rooms/${encodeURIComponent(roomId)}/${action}`,{method:"POST",body:"{}"});
+    if (!contextOwnerCurrent(roomId,userId,pane)) return;
+    if(action==="fork") {
+      await loadRooms();
+      if (!contextOwnerCurrent(roomId,userId,pane)) return;
+      if (pane) assignExtra(state.extra.indexOf(pane),data.room.id);
+      else await selectRoom(data.room.id);
+      toast("맥락을 이어받은 새 세션을 만들었습니다.");
+    } else {
+      await refreshContextOwner(pane);
+      toast("기록은 보존하고 대화 맥락을 압축했습니다.");
+    }
+  } catch(error){toast(error.message);}
+  finally {if(button?.isConnected){const owner=roomContextOwner(pane);button.disabled=owner.busy||(action==="compact"&&(!owner.canManage||!(owner.data?.context?.usedChars>=500)));}}
+}
+function contextNumber(value) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value.toLocaleString("ko-KR") : "확인 불가";
+}
+function contextPercent(context) {
+  return Math.min(100,Math.max(0,Math.round((context?.usedChars||0)/(context?.budgetChars||8000)*100)));
+}
+function contextElement(tag, text, className) {
+  const element=document.createElement(tag);if(text!==undefined)element.textContent=text;if(className)element.className=className;return element;
+}
+function renderContextMeter(context, form = $("#composer-form"), pane = null) {
+  if(!form)return;
+  let bar=$(".context-controls",form);
+  if(!bar) {
+    bar=contextElement("div",undefined,"context-controls");
+    const fork=contextElement("button","Fork","context-action");fork.type="button";fork.setAttribute("aria-label","맥락을 이어받아 새 세션 만들기");fork.onclick=()=>sessionAction("fork",pane,fork);
+    const compact=contextElement("button","Compact","context-action");compact.type="button";compact.setAttribute("aria-label","대화 맥락 압축");compact.onclick=()=>sessionAction("compact",pane,compact);
+    const trigger=contextElement("button",undefined,"context-trigger");trigger.type="button";trigger.setAttribute("aria-label","컨텍스트 및 API 사용량");trigger.setAttribute("aria-haspopup","dialog");trigger.setAttribute("aria-expanded","false");
+    const ring=contextElement("span",undefined,"context-ring"),label=contextElement("span",undefined,"context-label");ring.setAttribute("aria-hidden","true");label.setAttribute("aria-hidden","true");trigger.append(ring,label);trigger.onclick=()=>openContextPopover(trigger,pane);
+    bar.append(fork,compact,trigger);form.append(bar);
+    if(!pane){bar.id="context-controls";fork.id="fork-session";compact.id="compact-session";trigger.id="context-usage-button";ring.id="context-ring";label.id="context-label";}
   }
-  const percent=Math.min(100,Math.round((context?.usedChars||0)/(context?.budgetChars||8000)*100));
-  $("#context-ring").style.setProperty("--context",percent+"%");$("#context-ring").setAttribute("aria-valuenow",String(percent));
-  $("#context-label").textContent=percent+"%";bar.title=`대화 맥락 추정 ${context?.estimatedTokens||0} 토큰 / 약 4,000 토큰. 시스템 지시·도구·이미지는 제외됩니다.`;
-  $("#compact-session").disabled=Boolean(state.roomData?.busy)||!(context?.usedChars>=500);
-  $("#fork-session").disabled=Boolean(state.roomData?.busy);
+  const percent=contextPercent(context), owner=roomContextOwner(pane);
+  $(".context-ring",bar).style.setProperty("--context",percent+"%");
+  $(".context-label",bar).textContent=percent+"%";
+  bar.removeAttribute("title");
+  const buttons=$$(".context-action",bar);buttons[0].disabled=owner.busy;buttons[1].disabled=owner.busy||!owner.canManage||!(context?.usedChars>=500);
+  buttons[1].setAttribute("aria-label",owner.canManage?"대화 맥락 압축":"대화 맥락 압축 · 세션 소유자만 가능");
+  $(".context-trigger",bar).disabled=!owner.roomId;
+  if(contextPopover?.roomId===owner.roomId)renderPopoverContext(contextPopover.contextSection,context);
+  updateModelAvailability();
+}
+let contextPopover = null;
+function closeContextPopover() {
+  const open=contextPopover;if(!open)return;contextPopover=null;
+  open.cancelled=true;open.abort.abort();open.trigger.setAttribute("aria-expanded","false");
+  window.removeEventListener("resize",open.position);window.removeEventListener("scroll",open.position,true);
+  try {if(open.native)open.element.hidePopover();else if(open.element.open)open.element.close();} catch {}
+  open.element.remove();
+}
+function renderPopoverContext(section, context) {
+  section.replaceChildren();
+  const heading=contextElement("h3","대화 맥락"),amount=contextElement("strong",`${contextPercent(context)}%`,"context-popover-percent");
+  const top=contextElement("div",undefined,"context-section-heading");top.append(heading,amount);
+  const meter=document.createElement("progress");meter.max=100;meter.value=contextPercent(context);meter.setAttribute("aria-label","앱 대화 맥락 추정 사용률");
+  const tokens=contextElement("p",`약 ${contextNumber(context?.estimatedTokens)} / ${contextNumber(Math.round((context?.budgetChars||8000)/2))} 토큰 · 추정`,"context-muted");
+  const breakdown=contextElement("div",undefined,"context-breakdown");
+  for(const [label,value] of [["최근 대화",context?.messageTokens],["압축 요약",context?.summaryTokens]]) {
+    const row=contextElement("div");row.append(contextElement("span",label),contextElement("span",`${contextNumber(value)} 토큰`));breakdown.append(row);
+  }
+  section.append(top,meter,tokens,breakdown,contextElement("p","앱이 다음 요청에 담는 대화 범위입니다. 시스템 지시·도구·이미지와 모델 전체 컨텍스트 창은 제외됩니다.","context-note"));
+}
+function usageTime(value) {
+  const date=new Date(value);return value!=null&&!Number.isNaN(date.getTime())?date.toLocaleString("ko-KR",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}):"시각 확인 불가";
+}
+function renderUsageSection(section, usage) {
+  section.replaceChildren(contextElement("h3","이 대화의 API 기록"));
+  const counts=contextElement("div",undefined,"context-usage-counts");
+  for(const [label,value] of [["입력 토큰",usage.inputTokens],["출력 토큰",usage.outputTokens],["API 응답",usage.requests]]) {
+    const item=contextElement("div");item.append(contextElement("strong",contextNumber(value)),contextElement("span",label));counts.append(item);
+  }
+  section.append(counts);
+  if(usage.last) section.append(contextElement("p",`최근 ${usage.last.provider || "공급자 미제공"} · ${usage.last.model || "모델 미제공"}`,"context-note"));
+  else section.append(contextElement("p","기록된 API 호출이 없습니다.","context-note"));
+  const providers=(Array.isArray(usage.providers)?[...usage.providers]:[]).sort((a,b)=>new Date(b.at)-new Date(a.at));
+  if(providers.length) {
+    const quota=contextElement("section",undefined,"context-quota");quota.append(contextElement("h3","공급자 한도"));
+    const selector=contextElement("select",undefined,"context-provider-select");selector.setAttribute("aria-label","공급자와 API 키 선택");
+    providers.forEach((provider,index)=>{
+      const slot=Number.isInteger(provider.keySlot)?provider.keySlot+1:"확인 불가";
+      selector.append(new Option(`${provider.provider || "공급자"} · 키 ${slot}`,String(index)));
+    });
+    const values=contextElement("div");
+    function showProvider() {
+      const provider=providers[Number(selector.value)||0],groq=String(provider.provider).toLowerCase()==="groq";
+      values.replaceChildren(contextElement("p",`${usageTime(provider.at)} 기준${groq?" · 조직 공유":""}`,"context-note"));
+      for(const [key,label] of [["requests","요청"],["tokens","토큰"]]) {
+        const limit=provider.limits?.[key],row=contextElement("div",undefined,"context-quota-row");
+        const value=limit?`${contextNumber(limit.remaining)} / ${contextNumber(limit.limit)} 남음`:"공급자 미제공";
+        row.append(contextElement("span",label+(groq?(key==="requests"?" / 일":" / 분"):"")),contextElement("span",value));values.append(row);
+        if(limit?.reset!=null)values.append(contextElement("p",`갱신: ${String(limit.reset).slice(0,100)}`,"context-note"));
+      }
+      contextPopover?.position();
+    }
+    selector.onchange=showProvider;showProvider();quota.append(selector,values);section.append(quota);
+  }
+  const scope=contextElement("details",undefined,"context-scope-note");scope.append(contextElement("summary","집계 기준"));
+  scope.append(contextElement("p","기록 시작 이후 이 대화의 API 응답만 집계합니다. 전체 계정 사용량이나 청구액은 아닙니다. 공급자 한도는 마지막 응답 시점의 값입니다.","context-note"));
+  if(usage.quotaNote)scope.append(contextElement("p",usage.quotaNote,"context-note"));
+  else if(!providers.length)scope.append(contextElement("p","제공된 공급자 잔여 한도 정보가 없습니다.","context-note"));
+  scope.addEventListener("toggle",()=>contextPopover?.position());section.append(scope);
+}
+async function openContextPopover(trigger,pane) {
+  if(contextPopover?.trigger===trigger){closeContextPopover();return;}
+  closeContextPopover();
+  const {roomId,data}=roomContextOwner(pane),userId=state.session?.user?.id;if(!roomId)return;
+  const native=typeof HTMLElement.prototype.showPopover==="function";
+  const element=contextElement(native?"div":"dialog",undefined,"context-popover");element.setAttribute("role","dialog");element.setAttribute("aria-label","컨텍스트 및 API 사용량");if(native)element.setAttribute("popover","auto");
+  const header=contextElement("header"),title=contextElement("h2","컨텍스트 및 API 사용량"),close=contextElement("button","×","context-popover-close");close.type="button";close.setAttribute("aria-label","사용량 닫기");close.onclick=closeContextPopover;header.append(title,close);
+  const contextSection=contextElement("section"),usageSection=contextElement("section",undefined,"context-api-section");renderPopoverContext(contextSection,data?.context);usageSection.append(contextElement("p","API 기록을 확인하는 중…","context-muted"));
+  element.append(header,contextSection,usageSection);document.body.append(element);
+  const open={element,trigger,roomId,pane,userId,native,contextSection,cancelled:false,abort:new AbortController()};
+  open.position=()=>{
+    if(!trigger.isConnected){closeContextPopover();return;}
+    const rect=trigger.getBoundingClientRect(),width=element.offsetWidth,height=element.offsetHeight;
+    element.style.left=Math.max(12,Math.min(innerWidth-width-12,rect.right-width))+"px";
+    element.style.top=Math.max(12,Math.min(innerHeight-height-12,rect.top-height-10))+"px";
+  };
+  contextPopover=open;trigger.setAttribute("aria-expanded","true");
+  if(native){element.addEventListener("toggle",event=>{if(event.newState==="closed"&&contextPopover===open)closeContextPopover();});element.showPopover();}
+  else {element.addEventListener("close",()=>{if(contextPopover===open)closeContextPopover();});element.showModal();element.addEventListener("click",event=>{if(event.target===element){const r=element.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)closeContextPopover();}});}
+  open.position();window.addEventListener("resize",open.position);window.addEventListener("scroll",open.position,true);
+  try {
+    const usage=await api(`/api/rooms/${encodeURIComponent(roomId)}/usage`,{signal:open.abort.signal});
+    if(open.cancelled||contextPopover!==open||!contextOwnerCurrent(roomId,userId,pane))return;
+    renderUsageSection(usageSection,usage);open.position();
+  }catch(error){if(!open.cancelled){usageSection.replaceChildren(contextElement("p","API 기록을 불러오지 못했습니다. 다시 열어 확인해주세요.","context-note"));open.position();}}
 }
 async function createRoom(event) {
   event.preventDefault();
@@ -1208,6 +1346,72 @@ function saveRoomPreferences(id, prefs) {
   if (!id) return;
   try { localStorage.setItem("community-model:" + state.session.user.id + ":" + id, JSON.stringify(prefs)); } catch {}
 }
+function updateModelAvailability() {
+  for(const select of $$(".model-select")) {
+    const pane=select._pane||null,owner=roomContextOwner(pane);
+    const disabled=!owner.roomId||owner.busy;
+    select.disabled=disabled;
+    if(select._triggerButton)select._triggerButton.disabled=disabled;
+    if(select._moreButton)select._moreButton.disabled=disabled||!state.models.length;
+    const form=select.closest("form");
+    if(form) {
+      const send=$('button[type="submit"]',form);if(send)send.disabled=disabled;
+      const actions=$$(".context-action",form);
+      if(actions[0])actions[0].disabled=owner.busy;
+      if(actions[1])actions[1].disabled=owner.busy||!owner.canManage||!(owner.data?.context?.usedChars>=500);
+    }
+  }
+}
+function confirmModelChange(label,canReset) {
+  return new Promise(resolve=>{
+    const dialog=contextElement("dialog",undefined,"model-change-dialog");dialog.setAttribute("aria-labelledby","model-change-title");
+    const title=contextElement("h2","모델을 변경할까요?");title.id="model-change-title";
+    const next=contextElement("p",label,"model-change-name");
+    const note=contextElement("p","기록은 그대로 남습니다. 맥락을 초기화하면 이전 대화와 압축 요약을 다음 요청에 보내지 않습니다.","context-note");
+    const actions=contextElement("div",undefined,"model-change-actions");
+    let choice=null;
+    for(const [value,text] of [["keep","맥락 유지하고 변경"],["reset","맥락 초기화 후 변경"],[null,"취소"]]) {
+      const button=contextElement("button",text);button.type="button";button.disabled=value==="reset"&&!canReset;
+      button.onclick=()=>{choice=value;dialog.close();};actions.append(button);
+    }
+    dialog.append(title,next,note);
+    if(!canReset)dialog.append(contextElement("p","맥락 초기화는 세션 소유자만 할 수 있습니다.","context-note"));
+    dialog.append(actions);dialog.addEventListener("close",()=>{dialog.remove();resolve(choice);},{once:true});
+    document.body.append(dialog);dialog.showModal();
+  });
+}
+async function requestModelChange(select, value) {
+  const pane=select._pane||null,{roomId,busy}=roomContextOwner(pane),userId=state.session?.user?.id;
+  const previous=select.dataset.chosen ?? select.value;
+  select.value=previous;
+  if(!roomId||!select.isConnected||busy||value===previous)return;
+  const operation=Symbol("model-change");modelChanges.set(roomId,operation);select._changingModel=operation;updateModelAvailability();
+  const stillCurrent=()=>select.isConnected&&contextOwnerCurrent(roomId,userId,pane);
+  try {
+    const model=state.models.find(item=>item.value===value);
+    const choice=await confirmModelChange(value?(model?modelLabel(model):value):"자동 선택 · 추천",roomContextOwner(pane).canManage);
+    if(!choice||!stillCurrent())return;
+    if(roomContextOwner(pane).working){toast("답변이 끝난 뒤 모델을 변경해주세요.");return;}
+    if(choice==="reset") {
+      if(!roomContextOwner(pane).canManage)return;
+      await api(`/api/rooms/${encodeURIComponent(roomId)}/context-reset`,{method:"POST",body:"{}"});
+      if(!stillCurrent())return;
+    }
+    // Commit only after confirmation and, when requested, a successful server reset.
+    select.dataset.chosen=value;
+    if(pane)pane.model=value;
+    const effort=pane?pane.effort||"":$("#effort-select").value;
+    saveRoomPreferences(roomId,{model:value,effort});
+    applyModels(state.models);
+    if(choice==="reset")await refreshContextOwner(pane);
+  } catch(error) {if(stillCurrent())toast(error.message);}
+  finally {
+    if(modelChanges.get(roomId)===operation)modelChanges.delete(roomId);
+    if(select._changingModel===operation)select._changingModel=false;
+    if(stillCurrent())select.value=select.dataset.chosen ?? previous;
+    updateModelAvailability();
+  }
+}
 function applyModels(models) {
   if (Array.isArray(models)) state.models = models;
   const recommended = recommendedModels(state.models);
@@ -1234,21 +1438,24 @@ function applyModels(models) {
     }
     select._moreButton.disabled=!state.models.length;
   }
+  updateModelAvailability();
 }
 function openRecommendedModels(select,trigger){
+  if(select.disabled)return;
   const dialog=document.createElement("dialog");dialog.className="quick-model-picker";dialog.setAttribute("aria-label","추천 모델 선택");
   const title=document.createElement("h2");title.textContent="추천 모델";dialog.append(title);
   const entries=[{value:"",id:"",name:"자동 선택 · 추천"},...recommendedModels(state.models)];
   const current=state.models.find(m=>m.value===select.value);if(current&&!entries.some(m=>m.value===current.value))entries.push(current);
-  for(const model of entries){const button=document.createElement("button");button.type="button";button.className="quick-model-option";button.textContent=(model.value?modelLabel(model):model.name)+(select.value===model.value?" ✓":"");button.setAttribute("aria-pressed",String(select.value===model.value));button.onclick=()=>{if(select.isConnected){select.dataset.chosen=model.value;applyModels(state.models);select.dispatchEvent(new Event("change",{bubbles:true}));}dialog.close();};dialog.append(button);}
+  for(const model of entries){const button=document.createElement("button");button.type="button";button.className="quick-model-option";button.textContent=(model.value?modelLabel(model):model.name)+(select.value===model.value?" ✓":"");button.setAttribute("aria-pressed",String(select.value===model.value));button.onclick=()=>{dialog.close();void requestModelChange(select,model.value);};dialog.append(button);}
   const more=document.createElement("button");more.type="button";more.className="quick-model-more";more.textContent="전체 모델 검색 →";more.onclick=()=>{dialog.close();openModelBrowser(select,trigger);};dialog.append(more);
   const close=document.createElement("button");close.type="button";close.className="quick-model-more";close.textContent="닫기";close.onclick=()=>dialog.close();dialog.append(close);
-  dialog.onclose=()=>{dialog.remove();if(trigger.isConnected)trigger.focus();};
+  dialog.onclose=()=>{dialog.remove();if(trigger.isConnected&&!$("dialog[open]"))trigger.focus();};
   dialog.addEventListener("click",event=>{if(event.target===dialog){const r=dialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)dialog.close();}});
   document.body.append(dialog);dialog.showModal();
 }
 let modelBrowser;
 function openModelBrowser(select,trigger) {
+  if(select.disabled)return;
   if(!modelBrowser){
     modelBrowser=document.createElement("dialog");modelBrowser.className="model-browser";modelBrowser.setAttribute("aria-labelledby","model-browser-title");
     modelBrowser.innerHTML='<header><div><span class="picker-eyebrow">MODEL LIBRARY</span><h2 id="model-browser-title">어떤 모델과 대화할까요?</h2></div><button type="button" class="model-browser-close" aria-label="모델 선택 닫기">×</button></header><input class="model-search" type="search" placeholder="모델 또는 공급자 검색" aria-label="모델 또는 공급자 검색"><p class="model-count" role="status"></p><div class="model-results"></div><button class="model-load-more" type="button">더 불러오기</button>';
@@ -1268,11 +1475,11 @@ function openModelBrowser(select,trigger) {
       const name=document.createElement("strong"),detail=document.createElement("span"),badge=document.createElement("small");
       name.textContent=modelLabel(model);detail.textContent=(model.providers||[]).join(" · ");badge.textContent=select.value===model.value?"선택됨":recommended.has(model.value)?"추천":model.id;
       button.append(name,detail,badge);button.title=model.id;
-      button.onclick=()=>{if(select.isConnected){select.dataset.chosen=model.value;applyModels(state.models);select.dispatchEvent(new Event("change",{bubbles:true}));}modelBrowser.close();};results.append(button);
+      button.onclick=()=>{modelBrowser.close();void requestModelChange(select,model.value);};results.append(button);
     }
     load.hidden=count>=matching.length;
   }
-  search.value="";search.oninput=()=>{count=60;render();};load.onclick=()=>{count+=60;render();};modelBrowser.onclose=()=>{if(trigger.isConnected)trigger.focus();};
+  search.value="";search.oninput=()=>{count=60;render();};load.onclick=()=>{count+=60;render();};modelBrowser.onclose=()=>{if(trigger.isConnected&&!$("dialog[open]"))trigger.focus();};
   render();modelBrowser.showModal();search.focus();
 }
 function setLayout(count) {
@@ -1315,6 +1522,7 @@ function setLayout(count) {
   refreshExtras();
 }
 function renderExtraPanes() {
+  if(contextPopover?.pane)closeContextPopover();
   syncProgressStreams();
   const grid = $("#pane-grid");
   const spans = { 5: [2, 2, 2, 3, 3], 7: [3, 3, 3, 3, 4, 4, 4] }[state.layout];
@@ -1385,6 +1593,7 @@ function renderExtraPanes() {
     send.append(icon("arrow"));
     row.append(input, send);
     form.append(controls, row);
+    renderContextMeter(pane.data?.context,form,pane);
     section.append(header, list, form);
     grid.append(section);
     section._desktop=createDesktopUI({api,getRoomId:()=>pane.roomId,toast,mount:section,initialView:pane.desktopView || "browser",onViewChange:view=>{pane.desktopView=view;}});
@@ -1400,11 +1609,8 @@ function modelSelect(pane) {
   select.className = "model-select";
   select.setAttribute("aria-label", "모델");
   select.dataset.chosen = pane.model || "";
-  select.addEventListener("change", () => {
-    pane.model = select.value;
-    saveRoomPreferences(pane.roomId, {model:pane.model, effort:pane.effort || ""});
-    select.dataset.chosen = select.value;
-  });
+  select._pane=pane;
+  select.addEventListener("change", () => { void requestModelChange(select,select.value); });
   label.append(select);
   return label;
 }
@@ -1428,12 +1634,13 @@ function effortSelect(pane) {
 async function submitPane(event, index) {
   event.preventDefault();
   const pane = state.extra[index];
-  if (!pane?.roomId || pane.sending) return;
+  if (!pane?.roomId || roomContextOwner(pane).busy) return;
   const form = event.currentTarget;
   const input = $("textarea", form);
   const text = input.value.trim();
   if (!text) return;
   pane.sending = true;
+  updateModelAvailability();
   try {
     const result = await api(`/api/rooms/${encodeURIComponent(pane.roomId)}/messages`, {
       method: "POST",
@@ -1455,6 +1662,7 @@ async function submitPane(event, index) {
     toast(error.message);
   } finally {
     pane.sending = false;
+    updateModelAvailability();
   }
 }
 async function refreshExtra(index) {
@@ -1472,6 +1680,7 @@ async function refreshExtra(index) {
     if (unchanged) return;
     const section = $$(".extra-pane")[index];
     if (!section) return;
+    renderContextMeter(data.context,$(".pane-composer",section),pane);
     const list = $(".message-list", section);
     const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 90;
     list.replaceChildren();
@@ -1572,9 +1781,9 @@ function bind() {
   $("#room-form").addEventListener("submit", createRoom);
   $("#join-form").addEventListener("submit", joinRoom);
   $("#composer-form").addEventListener("submit", submitMessage);
-  for (const selector of ["#model-select", "#effort-select"]) $(selector).addEventListener("change", () => {
-    $("#model-select").dataset.chosen = $("#model-select").value;
-    saveRoomPreferences(state.selectedRoom, {model:$("#model-select").value, effort:$("#effort-select").value});
+  $("#model-select").addEventListener("change",()=>{void requestModelChange($("#model-select"),$("#model-select").value);});
+  $("#effort-select").addEventListener("change",()=>{
+    saveRoomPreferences(state.selectedRoom,{model:$("#model-select").dataset.chosen || "",effort:$("#effort-select").value});
   });
   $("#room-view").addEventListener("mousedown", () => {
     if (state.layout < 2) return;

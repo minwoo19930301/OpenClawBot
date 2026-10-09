@@ -1304,3 +1304,11 @@ button:active .agent-art { transform:scale(.94); }
 .host-card progress::-webkit-progress-value { background:#a4c6df; border-radius:6px; transition:width 400ms ease; }
 .host-filesystem { display:flex; flex-wrap:wrap; gap:12px; justify-content:space-between; padding:14px 0; border-top:1px solid var(--line); }
 .host-warning { color:#e8b879; }
+
+.context-controls { display:flex; align-items:center; justify-content:flex-end; gap:10px; padding:8px 12px; color:var(--muted);font-size:11px; }
+.context-controls button { background:transparent; border:1px solid var(--line); border-radius:8px; padding:5px 9px; }
+.context-ring { display:block; width:22px; height:22px; border-radius:50%; background:conic-gradient(#b5d4ec var(--context,0%),#ffffff20 0); mask:radial-gradient(circle,transparent 45%,black 48%); }
+.capability-hub { width:min(720px,90vw);max-height:85vh;overflow:auto;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:20px;padding:24px; }
+.capability-hub::backdrop { background:#0009; }
+.capability-hub section { border-top:1px solid var(--line);margin-top:20px;padding-top:10px; }
+.capability-hub button { background:var(--surface);border-radius:8px;padding:8px 16px; }

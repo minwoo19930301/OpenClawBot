@@ -117,10 +117,13 @@ function renderAgentLinks() {
   let links=$("#agent-workspaces");
   if(!links){links=document.createElement("div");links.id="agent-workspaces";links.className="agent-workspaces";els.roomList.before(links);}
   links.replaceChildren();
-  for(const room of state.rooms.filter(r=>!r.archived&&(r.personal||r.id===MONITOR_ROOM))) {
+  if(state.session?.user?.role==="admin") {
+    const hub=document.createElement("button");hub.textContent="통합 관리";hub.onclick=openCapabilityHub;links.append(hub);
+  }
+  for(const room of state.rooms.filter(r=>!r.archived&&r.id===MONITOR_ROOM)) {
     const button=document.createElement("button");button.type="button";
     button.append(icon("agent"));
-    const label=document.createElement("span");label.textContent=room.personal?"Agent Bot":"서버 상태";button.append(label);
+    const label=document.createElement("span");label.textContent="대시보드";button.append(label);
     button.onclick=()=>selectRoom(room.id);links.append(button);
   }
 }
@@ -316,7 +319,7 @@ function renderRooms() {
   els.roomList.replaceChildren();
   const query = $("#room-search").value.trim().toLocaleLowerCase();
   const visibleRooms = state.rooms.filter((room) =>
-    !!room.archived === showDeletedRooms && (showDeletedRooms || (!room.personal && room.id!==MONITOR_ROOM)) && (room.name + " " + room.description).toLocaleLowerCase().includes(query),
+    !!room.archived === showDeletedRooms && (showDeletedRooms || (room.id!==MONITOR_ROOM)) && (room.name + " " + room.description).toLocaleLowerCase().includes(query),
   ).sort((a,b)=>Number(!!b.pinned)-Number(!!a.pinned));
   if (query && !visibleRooms.length) {
     const empty = document.createElement("p");
@@ -392,7 +395,7 @@ async function selectRoom(id) {
   els.roomView.classList.remove("is-hidden");
   const room = state.rooms.find((item) => item.id === id);
   if (room) {
-    els.roomTitle.textContent = room.name;
+    els.roomTitle.textContent = room.id===MONITOR_ROOM?"대시보드":room.name;
     els.mobileRoomTitle.textContent = room.name;
     els.roomDescription.textContent = room.description || "";
     const canInvite = !room.personal && room.id !== MONITOR_ROOM &&
@@ -497,6 +500,8 @@ function stopPolling() {
   state.pollTimer = null;
 }
 function renderRoom(data) {
+  if(data.room) {const room=state.rooms.find(r=>r.id===data.room.id);if(room&&room.name!==data.room.name){room.name=data.room.name;els.roomTitle.textContent=room.name;renderRooms();}}
+  renderContextMeter(data.context);
   const previousNodes=new Map([...els.messages.children].filter(el=>el.dataset.messageId).map(el=>[el.dataset.messageId,el]));
   els.messages.replaceChildren();
   const messages = data.messages || [];
@@ -924,6 +929,47 @@ function openDialog(dialog) {
 function closeDialog(dialog) {
   if (dialog?.open) dialog.close();
 }
+let creatingSession=false;
+async function startNewSession() {
+  if(creatingSession)return;creatingSession=true;
+  try {const data=await api("/api/rooms",{method:"POST",body:JSON.stringify({})});await loadRooms();await selectRoom(data.room.id);$("#message-input").focus();}
+  catch(error){toast(error.message);}finally{creatingSession=false;}
+}
+async function openCapabilityHub() {
+  let dialog=$("#capability-hub");
+  if(!dialog){dialog=document.createElement("dialog");dialog.id="capability-hub";dialog.className="capability-hub";document.body.append(dialog);}
+  dialog.replaceChildren();
+  const title=document.createElement("h2");title.textContent="통합 관리";
+  const close=document.createElement("button");close.textContent="닫기";close.onclick=()=>dialog.close();dialog.append(title,close);dialog.showModal();
+  try {
+    const data=await api("/api/admin/capabilities");
+    for(const [name,items] of [["API",[...new Set(data.providers.map(p=>p.name))]],["Vault",data.services.map(s=>`${s.name} · ${s.configured?"키 등록됨":"미등록"}`)],["MCP",["연결된 MCP 서버 없음"]],["스킬",["실행 연결된 스킬 없음"]]]) {
+      const section=document.createElement("section"),h=document.createElement("h3");h.textContent=name;section.append(h);
+      for(const text of items){const row=document.createElement("p");row.textContent=text;section.append(row);}dialog.append(section);
+    }
+    const note=document.createElement("p");note.textContent=data.note;dialog.append(note);
+  }catch(error){const note=document.createElement("p");note.textContent=error.message;dialog.append(note);}
+}
+async function sessionAction(action) {
+  const id=state.selectedRoom;if(!id||id===MONITOR_ROOM)return;
+  const button=$(action==="fork"?"#fork-session":"#compact-session");button.disabled=true;
+  try {const data=await api(`/api/rooms/${id}/${action}`,{method:"POST",body:JSON.stringify({})});if(action==="fork"){await loadRooms();await selectRoom(data.room.id);toast("맥락을 이어받은 새 세션을 만들었습니다.");}else{await refreshRoom(true);toast("기록은 보존하고 대화 맥락을 압축했습니다.");}}
+  catch(error){toast(error.message);}finally{button.disabled=false;}
+}
+function renderContextMeter(context) {
+  let bar=$("#context-controls");
+  if(!bar){bar=document.createElement("div");bar.id="context-controls";bar.className="context-controls";
+    const fork=document.createElement("button");fork.id="fork-session";fork.textContent="Fork";fork.title="대화 맥락을 이어받는 새 세션";fork.onclick=()=>sessionAction("fork");
+    const compact=document.createElement("button");compact.id="compact-session";compact.textContent="Compact";compact.onclick=()=>sessionAction("compact");
+    const ring=document.createElement("span");ring.id="context-ring";ring.className="context-ring";ring.setAttribute("role","meter");ring.setAttribute("aria-label","대화 컨텍스트 추정 사용률");ring.setAttribute("aria-valuemin","0");ring.setAttribute("aria-valuemax","100");
+    const label=document.createElement("span");label.id="context-label";bar.append(fork,compact,ring,label);$("#composer-form").after(bar);
+  }
+  const percent=Math.min(100,Math.round((context?.usedChars||0)/(context?.budgetChars||8000)*100));
+  $("#context-ring").style.setProperty("--context",percent+"%");$("#context-ring").setAttribute("aria-valuenow",String(percent));
+  $("#context-label").textContent=percent+"%";bar.title=`대화 맥락 추정 ${context?.estimatedTokens||0} 토큰 / 약 4,000 토큰. 시스템 지시·도구·이미지는 제외됩니다.`;
+  $("#compact-session").disabled=Boolean(state.roomData?.busy)||!(context?.usedChars>=500);
+  $("#fork-session").disabled=Boolean(state.roomData?.busy);
+}
 async function createRoom(event) {
   event.preventDefault();
   const form = event.currentTarget;
@@ -1340,7 +1386,7 @@ function bind() {
     }
   });
   ["#create-room-button", "#empty-create-button"].forEach((selector) =>
-    $(selector).addEventListener("click", () => openDialog($("#room-dialog"))),
+    $(selector).addEventListener("click", startNewSession),
   );
   $("#join-room-button").addEventListener("click", () =>
     openDialog($("#join-dialog")),

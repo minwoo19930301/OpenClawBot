@@ -96,7 +96,7 @@ export function createDesktopUI({ api, getRoomId, toast = () => {}, mount = null
   viewPicker.value=state.view;viewPicker.disabled=true;
   viewPicker.onchange=()=>{state.view=viewPicker.value;onViewChange(state.view);disconnect();if(dialog.open)hideDialog();connect(preview,true);};
   panel.append(head, viewPicker, status, preview, controls, sharedNote);
-  (mount || document.body).append(panel);
+  (mount || document.querySelector(".main-panel")).append(panel);
 
   const dialog = document.createElement("dialog");
   dialog.className = "desktop-dialog";
@@ -167,6 +167,7 @@ export function createDesktopUI({ api, getRoomId, toast = () => {}, mount = null
       target.replaceChildren();
       const rfb = new RFB(target, websocketUrl(ticketUrl.pathname + ticketUrl.search), { shared: true });
       configureDesktopInput(rfb, viewOnly);
+      if(target===preview){previewCover.hidden=!viewOnly;control.textContent=viewOnly?"제어하기":"보기로 전환";}
       rfb.addEventListener("connect", () => setStatus(rfb.viewOnly ? "미리보기 연결됨" : "제어 연결됨", "ready"));
       rfb.addEventListener("disconnect", () => {
         if (state.rfb === rfb) {
@@ -267,15 +268,15 @@ export function createDesktopUI({ api, getRoomId, toast = () => {}, mount = null
     else if (!state.connecting) refreshStatus();
   };
   const togglePanel = () => {
-    if (matchMedia("(pointer: coarse)").matches && state.status?.available) { openDialog(false, true); return; }
     if (panel.hidden) openPanel();
     else { disconnect(); panel.hidden = true; button.setAttribute("aria-expanded", "false"); }
   };
   button.setAttribute("aria-expanded", "false");
   button.addEventListener("click", togglePanel);
   close.addEventListener("click", () => { disconnect(); panel.hidden = true; button.setAttribute("aria-expanded", "false"); });
-  previewCover.addEventListener("click", () => openDialog(false));
-  control.addEventListener("click", () => openDialog(false));
+  const inlineControl=()=>{if(!state.rfb)return;state.rfb.viewOnly=!state.rfb.viewOnly;previewCover.hidden=!state.rfb.viewOnly;control.textContent=state.rfb.viewOnly?"제어하기":"보기로 전환";setStatus(state.rfb.viewOnly?"보기 모드":"제어 연결됨","ready");};
+  previewCover.addEventListener("click", inlineControl);
+  control.addEventListener("click", inlineControl);
   fullscreen.addEventListener("click", () => openDialog(false, true));
   dialogControl.addEventListener("click", () => {
     if (!state.rfb) return;

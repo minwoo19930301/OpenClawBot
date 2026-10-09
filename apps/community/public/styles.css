@@ -1311,7 +1311,7 @@ button:active .agent-art { transform:scale(.94); }
 /* Show the startup artwork still, without entrance or floating effects. */
 .startup-view .startup-logo,.startup-view strong,.startup-view p { animation:none!important; transform:none!important; }
 
-.startup-logo { visibility:hidden; }
+.startup-logo { visibility:visible; }
 .startup-logo.is-decoded { visibility:visible; }
 
 /* Live host dashboard replaces the monitor chat transcript. */

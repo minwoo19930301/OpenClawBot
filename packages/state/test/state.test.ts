@@ -125,44 +125,68 @@ test("memory store: add/update/delete and context block", async () => {
 
 test("automations: interval firing respects enable flag, persists", async () => {
   const dir = await mkdtemp(join(tmpdir(), "ogb-auto-"));
+  let scheduler: AutomationScheduler | undefined;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  let runPersistence: Promise<void> | undefined;
   try {
-    // Store clock in the past -> freshly created interval automations are due.
-    const past = () => Date.now() - 2 * 60_000;
-    const store = new AutomationStore({ dir, now: past });
-    const enabled = await store.create({
-      agentId: "a1",
-      name: "daily digest",
-      prompt: "summarize",
-      trigger: { type: "interval", intervalMinutes: 1 },
+    let persisted!: () => void;
+    let persistenceFailed!: (error: unknown) => void;
+    const persistence = new Promise<void>((resolve, reject) => {
+      persisted = resolve;
+      persistenceFailed = reject;
     });
-    await store.create({
+    class ObservedAutomationStore extends AutomationStore {
+      override async recordRun(id: string): Promise<void> {
+        runPersistence = super.recordRun(id);
+        try { await runPersistence; persisted(); }
+        catch (error) { persistenceFailed(error); throw error; }
+      }
+    }
+    // Both entries are due; visit the disabled entry before the enabled one.
+    const now = Date.now();
+    let storeNow = now - 2 * 60_000;
+    const store = new ObservedAutomationStore({ dir, now: () => storeNow });
+    const disabled = await store.create({
       agentId: "a2",
       name: "disabled",
       prompt: "never",
       trigger: { type: "interval", intervalMinutes: 1 },
       isEnabled: false,
     });
+    const enabled = await store.create({
+      agentId: "a1",
+      name: "daily digest",
+      prompt: "summarize",
+      trigger: { type: "interval", intervalMinutes: 1 },
+    });
 
     const fired: string[] = [];
-    const scheduler = new AutomationScheduler(store, async (a) => {
+    scheduler = new AutomationScheduler(store, async (a) => {
       fired.push(a.id);
+      storeNow = now;
+      scheduler!.stop();
     }, {
       intervalMs: 30,
-      now: () => Date.now(),
+      now: () => now,
     });
+    timeout = setTimeout(() => persistenceFailed(new Error("Automation run was not persisted within 5 seconds")), 5000);
     scheduler.start();
-    await new Promise((r) => setTimeout(r, 150));
-    scheduler.stop();
+    // Dispatch happens before recordRun writes; stopping the timer does not drain it.
+    await persistence;
 
-    assert.ok(fired.length >= 1, `fired ${fired.length} times`);
-    assert.ok(fired.every((id) => id === enabled.id), "only the enabled automation fires");
-    assert.ok((await store.get(enabled.id))!.runCount >= 1);
-    assert.equal((await store.get("a2")!)!.runCount, 0);
+    assert.deepEqual(fired, [enabled.id], "only the enabled automation fires");
+    assert.equal((await store.get(enabled.id))!.runCount, 1);
+    assert.equal((await store.get(disabled.id))!.runCount, 0);
 
     // persistence
     const reloaded = new AutomationStore({ dir });
     assert.equal((await reloaded.list()).length, 2);
+    assert.equal((await reloaded.get(enabled.id))!.runCount, 1);
+    assert.equal((await reloaded.get(disabled.id))!.runCount, 0);
   } finally {
+    scheduler?.stop();
+    clearTimeout(timeout);
+    await runPersistence?.catch(() => {});
     await rm(dir, { recursive: true, force: true });
   }
 });

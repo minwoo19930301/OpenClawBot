@@ -16,6 +16,8 @@ import { SessionRuntime } from "@open-grokbot/runner";
 import { connectedServiceTools, CONNECTED_SERVICE_PROMPT, createIntegrations } from "./integrations.mjs";
 import { ApiLlm } from "./model.mjs";
 import { createUsageStore } from "./usage.mjs";
+import { createSidebarStore } from "./sidebar.mjs";
+import { createWorkspaceHub, workspacePath } from "./workspace.mjs";
 import { EFFORTS, createProviderPool, formatModelList, publicModels } from "./providers.mjs";
 import { createOpenClawFromEnv } from "./lib/backend/openclaw-http.mjs";
 import { parseDesktops, createDesktopHub } from "./desktop.mjs";
@@ -144,6 +146,7 @@ export async function startCommunity(options = {}) {
   const db = new DatabaseSync(join(dataDir, "community.sqlite"));
   initialize(db);
   const modelUsage = createUsageStore(db);
+  const sidebarStore = createSidebarStore(db);
   const recordUsage = roomId => event => {
     // Accounting must never retry an otherwise successful, billable model call.
     try { modelUsage.record(roomId,event); } catch {}
@@ -180,7 +183,7 @@ export async function startCommunity(options = {}) {
   const fixedDesktops = new Set(desktops.keys());
   const provisioner = createProvisioner(env.COMMUNITY_PROVISIONER_SOCKET, desktops);
   const browserTools = options.browserTools ?? createBrowserTools({ desktops });
-  let desktopHub;
+  let desktopHub,workspaceHub;
   const initialRoomId = env.COMMUNITY_INITIAL_ROOM_ID;
   if (initialRoomId && !desktops.has(initialRoomId)) throw new Error("Initial room needs a configured desktop");
   const cookieFlags =
@@ -619,6 +622,10 @@ export async function startCommunity(options = {}) {
           "/desktop-screen.js": ["desktop-screen.js", "text/javascript"],
           "/desktop.js": ["desktop.js", "text/javascript"],
           "/desktop.css": ["desktop.css", "text/css"],
+          "/workspace-terminal.js": ["workspace-terminal.js", "text/javascript"],
+          "/vendor/xterm.js": ["vendor/xterm.js", "text/javascript"],
+          "/vendor/xterm.css": ["vendor/xterm.css", "text/css"],
+          "/vendor/xterm-LICENSE.txt": ["vendor/xterm-LICENSE.txt", "text/plain"],
           "/vendor/novnc.js": ["vendor/novnc.js", "text/javascript"],
           "/vendor/novnc-LICENSE.txt": ["vendor/novnc-LICENSE.txt", "text/plain"],
         };
@@ -649,9 +656,9 @@ export async function startCommunity(options = {}) {
       )
         throw failure(403, "세션을 새로 확인한 뒤 다시 시도해 주세요.");
       if (authenticating) limit("auth:" + req.socket.remoteAddress, 20);
-      else limit("api:" + user.id, 180);
+      else if(!/^\/api\/rooms\/[a-f0-9-]{36}\/workspace(?:\/|$)/.test(url.pathname))limit("api:" + user.id, 180);
       const isAttachmentPost = method === "POST" && /^\/api\/rooms\/[a-f0-9-]{36}\/attachments$/.test(url.pathname);
-      const needsJsonBody = (method === "POST" && !isAttachmentPost) || (method === "DELETE" && url.pathname === "/api/push/subscriptions");
+      const needsJsonBody = (method === "PUT" && url.pathname === "/api/sidebar") || (method === "POST" && !isAttachmentPost) || (method === "DELETE" && url.pathname === "/api/push/subscriptions");
       const body = needsJsonBody ? await readBody(req) : {};
       if (authenticating) {
         const username = text(body.username, 40, true).toLowerCase();
@@ -779,6 +786,40 @@ export async function startCommunity(options = {}) {
         limit("models:" + user.id, 8);
         const listed = await pool.listModels();
         return reply(res, 200, {models: publicModels(listed), failures: listed.failures});
+      }
+      if(url.pathname==="/api/sidebar") {
+        if(method==="GET")return reply(res,200,sidebarStore.read(user.id));
+        if(method==="PUT")return reply(res,200,sidebarStore.write(user.id,body));
+        throw failure(405,"허용되지 않은 요청입니다.");
+      }
+      const workspaceMatch=url.pathname.match(/^\/api\/rooms\/([a-f0-9-]{36})\/workspace(?:\/(browser\/frame|browser\/action|terminal\/ticket|files|file))?$/);
+      if(workspaceMatch){
+        const room=roomFor(workspaceMatch[1],user),part=workspaceMatch[2];
+        limit("workspace:"+user.id,1200);
+        if(!part&&method==="GET")return reply(res,200,await workspaceHub.status(room.id));
+        if(part==="browser/frame"&&method==="GET"){
+          limit("browser-frame:"+user.id,600);
+          if(!browserTools.frame)throw failure(503,"브라우저 화면 연결이 필요합니다.");
+          return reply(res,200,await browserTools.frame(room.id));
+        }
+        if(part==="browser/action"&&method==="POST"){
+          limit("browser-action:"+user.id,300);
+          if(!browserTools.action)throw failure(503,"브라우저 조작 연결이 필요합니다.");
+          return reply(res,200,await browserTools.action(room.id,body));
+        }
+        if(part==="terminal/ticket"&&method==="POST"){
+          limit("terminal-ticket:"+user.id,30);
+          return reply(res,201,workspaceHub.ticket(user,room.id));
+        }
+        if(part==="files"&&method==="GET")return reply(res,200,await workspaceHub.files(room.id,url.searchParams.get("path")||""));
+        if(part==="file"&&method==="GET"){
+          limit("workspace-file:"+user.id,30);
+          const path=workspacePath(url.searchParams.get("path")||"");
+          const content=await workspaceHub.file(room.id,path);
+          res.writeHead(200,{"content-type":"application/octet-stream","content-disposition":"attachment; filename*=UTF-8''"+encodeURIComponent(path.split("/").at(-1)||"download"),"cache-control":"no-store","content-length":content.length});
+          res.end(content);return;
+        }
+        throw failure(405,"허용되지 않은 요청입니다.");
       }
       const desktopMatch = url.pathname.match(/^\/api\/rooms\/([a-f0-9-]{36})\/desktop(?:\/(ticket|start))?$/);
       if (desktopMatch) {
@@ -1091,7 +1132,8 @@ export async function startCommunity(options = {}) {
       }
       if (match[2] === "preferences" && method === "POST") {
         if (typeof body.pinned !== "boolean" || typeof body.archived !== "boolean") throw failure(400,"대화 설정이 올바르지 않습니다.");
-        const preferences={pinned:body.pinned,archived:body.archived};
+        const prior=JSON.parse(db.prepare("SELECT value FROM settings WHERE key=?").get("room-ui:"+user.id+":"+room.id)?.value || "{}");
+        const preferences={pinned:body.pinned,archived:body.archived,groupId:Object.hasOwn(body,"groupId")?sidebarStore.group(user.id,body.groupId):prior.groupId || null};
         db.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run("room-ui:"+user.id+":"+room.id,JSON.stringify(preferences));
         return reply(res,200,preferences);
       }
@@ -1220,6 +1262,7 @@ export async function startCommunity(options = {}) {
     }
   });
   desktopHub=createDesktopHub({server,desktops,userFor,roomFor,touch:room=>provisioner.touch(desktops.sharedRoomId || room),originFor:()=>origin||boundOrigin});
+  workspaceHub=createWorkspaceHub({server,desktops,userFor,roomFor,touch:room=>provisioner.touch(desktops.sharedRoomId || room),originFor:()=>origin||boundOrigin,fetchImpl:options.workspaceFetch});
   server.requestTimeout = 30000;
   server.headersTimeout = 10000;
   await new Promise((done, reject) => {
@@ -1246,6 +1289,7 @@ export async function startCommunity(options = {}) {
         for (const controller of controllers) controller.abort();
         for(const clients of progressClients.values())for(const client of [...clients])client.close();
         desktopHub.close();
+        workspaceHub.close();
         await browserTools.close();
         await push.close();
         const stopped = new Promise((done) => server.close(done));

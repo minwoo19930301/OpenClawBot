@@ -12,7 +12,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 RUN apt-get update \
     && apt-get install --no-install-recommends -y \
        ca-certificates curl dpkg dbus-x11 fonts-liberation fonts-noto-cjk fonts-noto-color-emoji \
-       novnc openbox socat tini websockify x11-utils x11vnc xvfb xterm pcmanfm \
+       novnc openbox socat tini websockify x11-utils x11vnc xvfb xterm pcmanfm python3-aiohttp \
     && case "${TARGETARCH:-$(dpkg --print-architecture)}" in amd64) chrome_arch=amd64 ;; arm64) chrome_arch=arm64 ;; *) echo "Unsupported Chrome architecture" >&2; exit 1 ;; esac \
     && curl --fail --location --proto '=https' --tlsv1.2 --max-redirs 0 -o /tmp/google-chrome.deb "https://dl.google.com/linux/direct/google-chrome-stable_current_${chrome_arch}.deb" \
     && test "$(dpkg-deb -f /tmp/google-chrome.deb Architecture)" = "${chrome_arch}" \
@@ -29,8 +29,9 @@ RUN apt-get update \
     && chown -R desktop:desktop /home/desktop /run/desktop
 
 COPY --chmod=0755 entrypoint.sh /usr/local/bin/desktop-entrypoint
+COPY --chmod=0755 workspace-bridge.py /usr/local/bin/workspace-bridge
 
 USER desktop
 WORKDIR /home/desktop
-EXPOSE 6080 6081 6082 9222
+EXPOSE 6080 6081 6082 6083 9222
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/desktop-entrypoint"]

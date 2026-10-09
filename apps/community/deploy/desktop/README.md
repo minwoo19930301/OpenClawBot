@@ -51,3 +51,22 @@ References:
 When explicitly configured with COMMUNITY_SHARED_DESKTOP_ROOM=<existing mapped room UUID>, authenticated members of any room use that existing desktop. This is intentional shared workspace access: browser login state and files are common to its users. Room membership, session-bound one-use tickets and origin checks still apply. Service API secrets are not copied into the desktop.
 
 Enable COMMUNITY_DESKTOP_VIEWS=1 only after deploying the updated desktop entrypoint. Browser, Files and Terminal use three independent X displays in the same container and /home/desktop; switching the file view does not replace the browser screen. Websocket ports 6080–6082 are internal only. No additional public ports, privileged mode, sandbox bypass or VM is needed. Existing containers must be recreated with their current mounts and network configuration preserved; rebuilding the app alone does not enable these views.
+
+## Native files and terminal transport
+
+`workspace-bridge.py` runs as the existing `desktop` user (UID 10001), beside Chrome and the compatibility VNC views. Internal port **6083** is never published on the host. Only the application's socket peer `172.30.50.2` and container loopback are accepted. Requests with an `Origin` header are rejected so a page in the remote browser cannot open the internal WebSocket; the authenticated application proxy must omit that header. Forwarded-IP headers do not grant access.
+
+- `GET /health` returns `{ok:true,terminal:true,files:true}`.
+- `GET /files?path=<relative>` returns `{path,entries,truncated}`. Each entry contains `name`, relative `path`, `type`, byte `size`, and Unix-millisecond `modified`. Listings stop at 1,000 entries, skip symlinks and special files, and return directories first.
+- `GET /file?path=<relative>` downloads a regular file, at most 8 MiB, as an attachment. Directory-FD walks use `O_NOFOLLOW` at every component; absolute paths, traversal and symlink escapes are rejected even if another terminal changes a path during the read.
+- `WS /terminal?session=<64 lowercase hex characters>` starts or reattaches a Bash PTY. The application derives the session identifier from the authorized user/session/room; the browser never chooses a raw bridge identifier. Client messages are `{type:"input",data}` (at most 16 KiB of UTF-8) or `{type:"resize",cols,rows}` (2–400 columns, 2–200 rows). Server messages are `ready`, UTF-8 `output`, and `exit` with an exit code.
+
+There are at most 12 live PTYs and four viewers per PTY. Disconnecting a view leaves its shell available for reattachment. The last 64 KiB of output is replayed, output queues are bounded, and slow viewers detach without terminating another viewer or shell. PTYs with no activity for ten minutes are stopped. A minimal environment is passed to Bash; application/provider credentials, host SSH access, Docker control, and host mounts are not added. Commands retain the existing desktop user's container permissions and shared home.
+
+The image installs Debian's `python3-aiohttp`. For local tests, install `aiohttp` in an isolated Python environment and run:
+
+```sh
+python -m unittest discover -s apps/community/deploy/desktop -p 'test_workspace_bridge.py' -v
+```
+
+References: [aiohttp server/WebSocket API](https://docs.aiohttp.org/en/stable/web_reference.html), [Python PTY API](https://docs.python.org/3/library/pty.html), [Python directory-FD file operations](https://docs.python.org/3/library/os.html#os.open).

@@ -8,10 +8,14 @@ ws_port="${DESKTOP_WEBSOCKET_PORT:-6080}"
 cdp_port="${DESKTOP_CDP_PORT:-9222}"
 start_url="${DESKTOP_START_URL:-about:blank}"
 
-xvfb_pid= openbox_pid= vnc_pid= ws_pid= cdp_pid= browser_pid=
+xvfb_pid= openbox_pid= vnc_pid= ws_pid= cdp_pid= browser_pid= workspace_pid=
 Xvfb "$display" -screen 0 "$screen" -nolisten tcp -ac >/run/desktop/xvfb.log 2>&1 &
 xvfb_pid=$!
-trap 'kill "$xvfb_pid" "$openbox_pid" "$vnc_pid" "$ws_pid" "$cdp_pid" "$browser_pid" 2>/dev/null || true' INT TERM EXIT
+trap 'kill "$xvfb_pid" "$openbox_pid" "$vnc_pid" "$ws_pid" "$cdp_pid" "$browser_pid" "$workspace_pid" 2>/dev/null || true' INT TERM EXIT
+
+# Internal-only native files and PTY transport. Runs with the same desktop UID.
+/usr/bin/python3 /usr/local/bin/workspace-bridge >/run/desktop/workspace-bridge.log 2>&1 &
+workspace_pid=$!
 
 i=0
 until xdpyinfo -display "$display" >/dev/null 2>&1; do

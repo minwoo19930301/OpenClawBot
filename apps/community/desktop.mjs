@@ -20,7 +20,12 @@ export function parseDesktops(value = '{}', {sharedRoomId = '', multiView = fals
       if (targets.has(key)) throw new Error('Desktop endpoints cannot be shared between rooms');
       targets.add(key);
     }
-    desktops.set(roomId,{wsUrl:wsUrl.href,cdpUrl:cdpUrl.href});
+    const workspaceUrl = config.workspaceUrl;
+    if(workspaceUrl) {
+      const endpoint=new URL(workspaceUrl);
+      if(endpoint.protocol!=="http:"||endpoint.hostname!==cdpUrl.hostname||endpoint.username||endpoint.password||endpoint.pathname!=="/"||endpoint.search||endpoint.hash)throw new Error("Invalid workspace bridge endpoint");
+    }
+    desktops.set(roomId,{wsUrl:wsUrl.href,cdpUrl:cdpUrl.href,...(workspaceUrl?{workspaceUrl}: {})});
   }
   if(sharedRoomId) {
     if(!roomPattern.test(sharedRoomId) || !desktops.has(sharedRoomId))throw new Error('Shared desktop must reference an existing configured desktop');
@@ -53,6 +58,7 @@ export function createDesktopHub({server, desktops, userFor, roomFor, originFor,
     let url,roomId,user,config;
     try {
       url=new URL(req.url,'http://local');
+      if(/^\/api\/rooms\/[a-f0-9-]{36}\/workspace\/terminal\/ws$/.test(url.pathname))return;
       const match=url.pathname.match(/^\/api\/rooms\/([a-f0-9-]{36})\/desktop\/ws$/);
       if(!match) return reject(socket,404);
       if(req.headers.origin!==originFor()) return reject(socket,403);

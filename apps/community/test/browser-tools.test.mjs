@@ -43,3 +43,136 @@ test("fake CDP browser keeps one page per room and refs are snapshot scoped", as
   assert.equal(nodes[1].value, "hello");
   await tools.close();
 });
+
+function workspaceBrowserFixture(t,{shared=false}={}) {
+  const calls=[],metrics={connections:0,routes:0,closes:0};
+  let dimensions={width:1280,height:800},image=Buffer.from([0xff,0xd8,0xff,0xd9]),capture=async()=>image;
+  const page={
+    isClosed:()=>false,async bringToFront(){},url:()=>"https://example.com/",title:async()=>"Workspace page",
+    evaluate:async()=>({...dimensions}),
+    async screenshot(options){calls.push({type:"frame",options});return capture();},
+    async goto(url,options){calls.push({type:"navigate",url,options});},
+    async goBack(options){calls.push({type:"back",options});},
+    async goForward(options){calls.push({type:"forward",options});},
+    async reload(options){calls.push({type:"reload",options});},
+    keyboard:{async insertText(text){calls.push({type:"type",text});},async press(key){calls.push({type:"key",key});}},
+    mouse:{async click(x,y){calls.push({type:"click",x,y});},async wheel(deltaX,deltaY){calls.push({type:"scroll",deltaX,deltaY});}},
+  };
+  const context={pages:()=>[page],async setDefaultTimeout(){},async setDefaultNavigationTimeout(){},async addInitScript(){},async route(){metrics.routes++;},async unroute(){}};
+  const browser={contexts:()=>[context],isConnected:()=>true,async close(){metrics.closes++;}};
+  const endpoint={cdpUrl:"http://cdp"},desktops=new Map([["room",endpoint]]);
+  if(shared){desktops.sharedRoomId="room";desktops.get=()=>endpoint;desktops.has=()=>true;}
+  const tools=createBrowserTools({desktops,fetchImpl:async()=>({ok:true,json:async()=>({webSocketDebuggerUrl:"ws://127.0.0.1:9223/devtools/browser/workspace-test"})}),playwright:{chromium:{connectOverCDP:async()=>{metrics.connections++;return browser;}}}});
+  t.after(()=>tools.close());
+  return {tools,calls,metrics,setDimensions:value=>{dimensions=value;},setImage:value=>{image=value;},setCapture:value=>{capture=value;}};
+}
+
+test("workspace navigation rejects private and non-web targets before operating the page",async t=>{
+  const f=workspaceBrowserFixture(t);
+  for(const url of ["file:///etc/passwd","javascript:alert(1)","data:text/html,hello","http://localhost/","http://169.254.169.254/opc/v2/","http://[::1]/","https://user:secret@example.com/","invalid url","https://example.com/"+"x".repeat(2048)]){
+    await assert.rejects(()=>f.tools.action("room",{type:"navigate",url}),error=>[400,403].includes(error.status),url);
+  }
+  assert.deepEqual(f.calls,[],"forbidden navigation must never reach page.goto");
+  await f.tools.action("room",{type:"reload"});
+  assert.equal(f.calls[0].type,"reload","a rejected action must not poison the room queue");
+});
+
+test("workspace pointer and scroll bounds prevent off-viewport or non-finite remote input",async t=>{
+  const f=workspaceBrowserFixture(t);
+  for(const [x,y] of [[-1,0],[0,-1],[1280,0],[0,800],[Infinity,0],[0,NaN],["1",2],[null,2]]){
+    await assert.rejects(()=>f.tools.action("room",{type:"click",x,y}),error=>error.status===400);
+  }
+  for(const [deltaX,deltaY] of [[2001,0],[0,-2001],[NaN,0],[0,Infinity],["10",0]]){
+    await assert.rejects(()=>f.tools.action("room",{type:"scroll",deltaX,deltaY}),error=>error.status===400);
+  }
+  assert.deepEqual(f.calls,[]);
+  await f.tools.action("room",{type:"click",x:1279,y:799});
+  await f.tools.action("room",{type:"scroll",deltaX:-2000,deltaY:2000});
+  assert.deepEqual(f.calls,[{type:"click",x:1279,y:799},{type:"scroll",deltaX:-2000,deltaY:2000}]);
+  f.setDimensions({width:640,height:480});
+  await assert.rejects(()=>f.tools.action("room",{type:"click",x:700,y:100}),error=>error.status===400,"validate against the current viewport after resize");
+});
+
+test("workspace typing preserves IME text while rejecting oversized input and arbitrary key sequences",async t=>{
+  const f=workspaceBrowserFixture(t);
+  for(const text of ["x".repeat(4001),null,7,{}])await assert.rejects(()=>f.tools.action("room",{type:"type",text}),error=>error.status===400);
+  for(const key of ["Control+Alt+Shift+A","Enter\n","F12",";exec","","a".repeat(4000),null])await assert.rejects(()=>f.tools.action("room",{type:"key",key}),error=>error.status===400);
+  await assert.rejects(()=>f.tools.action("room",{type:"evaluate",script:"process.env"}),error=>error.status===400);
+  assert.deepEqual(f.calls,[]);
+  const text="한글 입력과 🙂";
+  await f.tools.action("room",{type:"type",text});
+  await f.tools.action("room",{type:"type",text:"x".repeat(4000)});
+  await f.tools.action("room",{type:"key",key:"Shift+Tab"});
+  await f.tools.action("room",{type:"key",key:"Control+A"});
+  assert.deepEqual(f.calls[0],{type:"type",text});
+  assert.equal(f.calls[1].text.length,4000);
+  assert.deepEqual(f.calls.slice(2),[{type:"key",key:"Shift+Tab"},{type:"key",key:"Control+A"}]);
+});
+
+test("workspace frames report the CSS viewport and reject oversized screenshots",async t=>{
+  const f=workspaceBrowserFixture(t);
+  f.setDimensions({width:1440,height:900});
+  const frame=await f.tools.frame("room");
+  assert.equal(frame.width,1440);assert.equal(frame.height,900);
+  assert.equal(frame.url,"https://example.com/");assert.equal(frame.title,"Workspace page");
+  assert.deepEqual(Buffer.from(frame.image.split(",")[1],"base64"),Buffer.from([0xff,0xd8,0xff,0xd9]));
+  assert.match(frame.image,/^data:image\/jpeg;base64,/);
+  assert.equal(f.calls[0].options.fullPage,false,"a tall page must not change click coordinate space");
+  f.setImage(Buffer.alloc(2*1024*1024+1));
+  await assert.rejects(()=>f.tools.frame("room"),error=>error.status===413);
+  await assert.rejects(()=>f.tools.frame("unconfigured"),error=>error.status===503);
+});
+
+test("workspace frame and action requests serialize so input cannot race an unfinished frame",async t=>{
+  const f=workspaceBrowserFixture(t);
+  let started,release;
+  const captureStarted=new Promise(resolve=>{started=resolve;}),captureGate=new Promise(resolve=>{release=resolve;});
+  t.after(()=>release());
+  f.setCapture(async()=>{started();await captureGate;return Buffer.from("jpeg");});
+  const frame=f.tools.frame("room");
+  await captureStarted;
+  const action=f.tools.action("room",{type:"type",text:"after frame"});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(f.calls.map(call=>call.type),["frame"],"no input while screenshot is being produced");
+  release();await Promise.all([frame,action]);
+  assert.deepEqual(f.calls.map(call=>call.type),["frame","type"]);
+});
+
+test("shared-room frames coalesce and all views serialize on one CDP connection",async t=>{
+  const f=workspaceBrowserFixture(t,{shared:true});
+  let started,release;
+  const captureStarted=new Promise(resolve=>{started=resolve;}),captureGate=new Promise(resolve=>{release=resolve;});
+  t.after(()=>release());
+  f.setCapture(async()=>{started();await captureGate;return Buffer.from("shared-frame");});
+  const first=f.tools.frame("room-a");await captureStarted;
+  const second=f.tools.frame("room-b");
+  assert.equal(second,first,"the same shared frame request must not take a second screenshot");
+  const action=f.tools.action("room-b",{type:"key",key:"Enter"});
+  const agent=f.tools.execute("room-c","browser_press",{key:"invalid"});
+  const rejected=assert.rejects(()=>agent,error=>error.status===400);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(f.calls.map(call=>call.type),["frame"]);
+  release();const frames=await Promise.all([first,second]);await action;await rejected;
+  assert.equal(frames[0],frames[1]);
+  assert.deepEqual(f.calls.map(call=>call.type),["frame","key"]);
+  assert.equal(f.metrics.connections,1,"shared rooms must not create competing CDP sessions");
+  assert.equal(f.metrics.routes,1,"network protection must be installed only once per shared context");
+  await f.tools.close();assert.equal(f.metrics.closes,1);
+});
+
+test("shared workspace bounds pending work and recovers after overload",async t=>{
+  const f=workspaceBrowserFixture(t,{shared:true});
+  let started,release;
+  const captureStarted=new Promise(resolve=>{started=resolve;}),captureGate=new Promise(resolve=>{release=resolve;});
+  t.after(()=>release());
+  f.setCapture(async()=>{started();await captureGate;return Buffer.from("frame");});
+  const first=f.tools.frame("room-a");await captureStarted;
+  const pending=Array.from({length:7},(_,index)=>f.tools.action("room-"+index,{type:"type",text:String(index)}));
+  await assert.rejects(()=>f.tools.action("extra-room",{type:"reload"}),error=>error.status===429);
+  await assert.rejects(()=>f.tools.execute("agent-room","browser_snapshot"),error=>error.status===429);
+  assert.equal(f.tools.frame("another-room"),first,"coalesced viewers must not consume pending operation slots");
+  release();await Promise.all([first,...pending]);
+  assert.deepEqual(f.calls.filter(call=>call.type==="type").map(call=>call.text),["0","1","2","3","4","5","6"]);
+  await f.tools.action("room-b",{type:"reload"});
+  assert.equal(f.calls.at(-1).type,"reload","overload must not permanently block the shared target");
+});

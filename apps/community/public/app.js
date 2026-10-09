@@ -185,6 +185,7 @@ async function loadSession() {
 $("#startup-retry").addEventListener("click", loadSession);
 function showAuth() {
   closeContextPopover();
+  resetSidebarState();
   modelChanges.clear();
   cancelActiveRecording();
   pwaUI?.setSession(null);
@@ -253,16 +254,22 @@ async function enterWorkspace() {
   els.modelStatus.textContent = [connected, model.selectable ? "API 순환" : ""].filter(Boolean).join(" · ");
   els.modelStatus.classList.toggle("is-hidden", !els.modelStatus.textContent);
   pwaUI?.setSession(state.session);
-  await loadRooms();
+  resetSidebarState(user.id);
+  const workspaceEpoch=sidebarEpoch;
+  await Promise.all([loadSidebar(),loadRooms()]);
+  if(state.session?.user?.id!==user.id||sidebarEpoch!==workspaceEpoch)return;
   try {
     const catalog = await api("/api/models");
+    if(state.session?.user?.id!==user.id||sidebarEpoch!==workspaceEpoch)return;
     applyModels(catalog.models);
     if (!catalog.models.length) toast(catalog.failures.length ? "모델 목록을 가져오지 못했습니다. 기본 모델로 연결됩니다." : "선택 가능한 API 모델이 없습니다. 기본 모델로 연결됩니다.");
   } catch (error) { toast(error.message || "모델 목록을 불러오지 못했습니다."); }
 }
 async function loadRooms() {
+  const userId=state.session?.user?.id,epoch=sidebarEpoch;if(!userId)return;
   try {
     const data = await api("/api/rooms");
+    if(userId!==state.session?.user?.id||epoch!==sidebarEpoch)return;
     state.rooms = data.rooms || [];
     state.bots = data.bots || [];
     if (
@@ -297,14 +304,165 @@ async function loadRooms() {
       );
     }
   } catch (error) {
-    toast(error.message);
+    if(userId===state.session?.user?.id&&epoch===sidebarEpoch)toast(error.message);
   }
 }
 let showDeletedRooms=false;
-async function updateRoomListPreference(room, changes) {
+let sidebarState={userId:null,groups:[],width:280,loaded:false};
+let sidebarConfirmed={groups:[],width:280};
+let sidebarEpoch=0,sidebarRevision=0,sidebarWriteQueue=Promise.resolve();
+let sidebarPreviewWidth=null,sidebarWidthTimer=null;
+function sidebarWidthBounds(viewport=innerWidth) {
+  return {min:200,max:Math.max(200,Math.min(420,viewport-360))};
+}
+function boundedSidebarWidth(value,viewport=innerWidth) {
+  const {min,max}=sidebarWidthBounds(viewport);return Math.max(min,Math.min(max,Math.round(Number(value)||280)));
+}
+function applySidebarWidth() {
+  const width=boundedSidebarWidth(sidebarPreviewWidth??sidebarState.width),handle=$("#sidebar-resizer");
+  els.workspace.style.setProperty("--sidebar-width",width+"px");
+  handle.setAttribute("aria-valuenow",String(width));handle.setAttribute("aria-valuetext",width+"픽셀");handle.setAttribute("aria-valuemax",String(sidebarWidthBounds().max));
+  handle.setAttribute("aria-disabled",String(!sidebarState.loaded));
+}
+function resetSidebarState(userId=null) {
+  sidebarEpoch+=1;sidebarRevision=0;showDeletedRooms=false;
+  clearTimeout(sidebarWidthTimer);sidebarWidthTimer=null;sidebarPreviewWidth=null;
+  sidebarState={userId,groups:[],width:280,loaded:false};sidebarConfirmed={groups:[],width:280};
+  els.workspace.classList.remove("sidebar-resizing","sidebar-collapsed");applySidebarWidth();
+  $("#create-sidebar-group").disabled=true;
+}
+function sidebarConfig(value) {
+  return {groups:Array.isArray(value?.groups)?value.groups.map(group=>({id:group.id,name:group.name,collapsed:!!group.collapsed})):[],width:Math.max(200,Math.min(420,Number(value?.width)||280))};
+}
+async function loadSidebar() {
+  const userId=state.session?.user?.id,epoch=sidebarEpoch;if(!userId)return;
   try {
-    const prefs=await api("/api/rooms/"+room.id+"/preferences",{method:"POST",body:JSON.stringify({pinned:!!room.pinned,archived:!!room.archived,...changes})});
-    Object.assign(room,prefs);
+    const config=sidebarConfig(await api("/api/sidebar",{retryable:true}));
+    if(epoch!==sidebarEpoch||state.session?.user?.id!==userId)return;
+    sidebarConfirmed=config;sidebarState={...config,userId,loaded:true};applySidebarWidth();renderRooms();
+  }catch(error){if(epoch===sidebarEpoch){toast("대화 그룹 설정을 불러오지 못했습니다. 새로고침해 다시 시도해주세요.");}}
+}
+function saveSidebar(next) {
+  const userId=state.session?.user?.id,epoch=sidebarEpoch;if(!userId||!sidebarState.loaded)return Promise.resolve(false);
+  const config=sidebarConfig(next),revision=++sidebarRevision;
+  sidebarState={...config,userId,loaded:true};applySidebarWidth();renderRooms();
+  const current=()=>epoch===sidebarEpoch&&state.session?.user?.id===userId;
+  const pending=sidebarWriteQueue.then(async()=>{
+    if(!current())return false;
+    try {
+      const saved=sidebarConfig(await api("/api/sidebar",{method:"PUT",body:JSON.stringify(config)}));
+      if(!current())return false;
+      sidebarConfirmed=saved;
+      if(revision===sidebarRevision){sidebarState={...saved,userId,loaded:true};applySidebarWidth();renderRooms();}
+      return true;
+    }catch(error){
+      if(current()){
+        if(revision===sidebarRevision){sidebarState={...sidebarConfirmed,userId,loaded:true};applySidebarWidth();renderRooms();}
+        toast(error.message||"대화 목록 설정을 저장하지 못했습니다.");
+      }
+      return false;
+    }
+  });
+  sidebarWriteQueue=pending.catch(()=>false);return pending;
+}
+function commitSidebarWidth() {
+  clearTimeout(sidebarWidthTimer);sidebarWidthTimer=null;
+  if(sidebarPreviewWidth==null)return;
+  const width=boundedSidebarWidth(sidebarPreviewWidth);sidebarPreviewWidth=null;
+  if(sidebarState.loaded&&width!==sidebarState.width)void saveSidebar({...sidebarState,width});
+  else applySidebarWidth();
+}
+function setupSidebarResize() {
+  const handle=$("#sidebar-resizer");let drag=null;
+  handle.addEventListener("pointerdown",event=>{
+    if(event.button!==0||!sidebarState.loaded||matchMedia("(max-width:720px)").matches)return;
+    event.preventDefault();event.stopPropagation();clearTimeout(sidebarWidthTimer);
+    drag={pointerId:event.pointerId,startX:event.clientX,width:boundedSidebarWidth(sidebarPreviewWidth??sidebarState.width),epoch:sidebarEpoch};
+    handle.setPointerCapture(event.pointerId);handle.focus();els.workspace.classList.add("sidebar-resizing");
+  });
+  handle.addEventListener("pointermove",event=>{
+    if(!drag||event.pointerId!==drag.pointerId)return;
+    if(drag.epoch!==sidebarEpoch){drag=null;return;}
+    sidebarPreviewWidth=boundedSidebarWidth(drag.width+event.clientX-drag.startX);applySidebarWidth();
+  });
+  const finish=event=>{
+    if(!drag||event.pointerId!==drag.pointerId)return;
+    const same=drag.epoch===sidebarEpoch;drag=null;els.workspace.classList.remove("sidebar-resizing");
+    if(handle.hasPointerCapture(event.pointerId))handle.releasePointerCapture(event.pointerId);
+    if(same)commitSidebarWidth();
+  };
+  handle.addEventListener("pointerup",finish);handle.addEventListener("lostpointercapture",finish);
+  handle.addEventListener("pointercancel",event=>{
+    if(!drag||event.pointerId!==drag.pointerId)return;drag=null;sidebarPreviewWidth=null;els.workspace.classList.remove("sidebar-resizing");applySidebarWidth();
+  });
+  handle.addEventListener("keydown",event=>{
+    if(!sidebarState.loaded||!["ArrowLeft","ArrowRight","Home","End"].includes(event.key))return;
+    event.preventDefault();const {min,max}=sidebarWidthBounds(),step=event.shiftKey?40:10;
+    sidebarPreviewWidth=boundedSidebarWidth(event.key==="Home"?min:event.key==="End"?max:(sidebarPreviewWidth??sidebarState.width)+(event.key==="ArrowRight"?step:-step));applySidebarWidth();
+    clearTimeout(sidebarWidthTimer);sidebarWidthTimer=setTimeout(commitSidebarWidth,250);
+  });
+  window.addEventListener("resize",applySidebarWidth);applySidebarWidth();
+}
+function sidebarDialog(title) {
+  const dialog=document.createElement("dialog");dialog.className="sidebar-dialog";dialog.setAttribute("aria-label",title);
+  const heading=document.createElement("h2");heading.textContent=title;dialog.append(heading);
+  dialog.addEventListener("close",()=>dialog.remove(),{once:true});document.body.append(dialog);return dialog;
+}
+function openSidebarGroupEditor(group=null) {
+  if(!sidebarState.loaded)return;
+  const epoch=sidebarEpoch,dialog=sidebarDialog(group?"그룹 이름 변경":"새 대화 그룹"),form=document.createElement("form");
+  const label=document.createElement("label");label.textContent="그룹 이름";
+  const input=document.createElement("input");input.name="name";input.maxLength=40;input.required=true;input.autocomplete="off";input.value=group?.name||"";label.append(input);
+  const message=document.createElement("p");message.className="form-message";message.setAttribute("role","alert");
+  const actions=document.createElement("div");actions.className="sidebar-dialog-actions";
+  const cancel=document.createElement("button");cancel.type="button";cancel.textContent="취소";cancel.onclick=()=>dialog.close();
+  const submit=document.createElement("button");submit.type="submit";submit.textContent=group?"저장":"만들기";actions.append(cancel,submit);form.append(label,message,actions);dialog.append(form);
+  form.onsubmit=async event=>{
+    event.preventDefault();if(submit.disabled||epoch!==sidebarEpoch)return;
+    const name=input.value.trim();if(!name){message.textContent="그룹 이름을 입력해주세요.";return;}
+    if(group&&!sidebarState.groups.some(item=>item.id===group.id)){dialog.close();return;}
+    if(!group&&sidebarState.groups.length>=20){message.textContent="그룹은 최대 20개까지 만들 수 있습니다.";return;}
+    setBusy(submit,true,"저장 중…");
+    const groups=group?sidebarState.groups.map(item=>item.id===group.id?{...item,name}:item):[...sidebarState.groups,{id:crypto.randomUUID(),name,collapsed:false}];
+    const saved=await saveSidebar({...sidebarState,groups});
+    if(saved&&epoch===sidebarEpoch)dialog.close();else setBusy(submit,false);
+  };
+  dialog.showModal();input.focus();input.select();
+}
+function openSidebarGroupMenu(group) {
+  const epoch=sidebarEpoch,dialog=sidebarDialog(group.name),rename=document.createElement("button"),remove=document.createElement("button"),cancel=document.createElement("button");
+  rename.type=remove.type=cancel.type="button";rename.textContent="이름 변경";remove.textContent="그룹 삭제";cancel.textContent="닫기";
+  rename.onclick=()=>{dialog.close();openSidebarGroupEditor(group);};cancel.onclick=()=>dialog.close();
+  const note=document.createElement("p");note.className="sidebar-dialog-note";note.textContent="그룹을 삭제해도 대화는 유지되며 ‘그룹 없음’으로 이동합니다.";
+  remove.onclick=async()=>{
+    remove.disabled=true;
+    const saved=await saveSidebar({...sidebarState,groups:sidebarState.groups.filter(item=>item.id!==group.id)});
+    if(saved&&epoch===sidebarEpoch){for(const room of state.rooms)if(room.groupId===group.id)room.groupId=null;renderRooms();dialog.close();}
+    else remove.disabled=false;
+  };
+  dialog.append(rename,remove,note,cancel);dialog.showModal();
+}
+function openRoomGroupPicker(room) {
+  if(!sidebarState.loaded)return;
+  const dialog=sidebarDialog("대화 그룹으로 이동"),epoch=sidebarEpoch;
+  for(const group of [{id:null,name:"그룹 없음"},...sidebarState.groups]) {
+    const button=document.createElement("button");button.type="button";button.className="sidebar-group-option";
+    const selected=(room.groupId||null)===group.id;button.textContent=group.name+(selected?" ✓":"");button.setAttribute("aria-pressed",String(selected));
+    button.onclick=async()=>{
+      if(epoch!==sidebarEpoch)return;if(selected){dialog.close();return;}
+      $$("button",dialog).forEach(item=>item.disabled=true);
+      if(await updateRoomListPreference(room,{groupId:group.id}))dialog.close();
+      else $$("button",dialog).forEach(item=>item.disabled=false);
+    };dialog.append(button);
+  }
+  const close=document.createElement("button");close.type="button";close.textContent="취소";close.onclick=()=>dialog.close();dialog.append(close);dialog.showModal();
+}
+async function updateRoomListPreference(room, changes) {
+  const userId=state.session?.user?.id,epoch=sidebarEpoch;
+  try {
+    const prefs=await api("/api/rooms/"+room.id+"/preferences",{method:"POST",body:JSON.stringify({pinned:!!room.pinned,archived:!!room.archived,groupId:room.groupId||null,...changes})});
+    if(userId!==state.session?.user?.id||epoch!==sidebarEpoch)return false;
+    const current=state.rooms.find(item=>item.id===room.id);if(!current)return false;Object.assign(current,prefs);
     if(prefs.archived && state.selectedRoom===room.id) {
       const next=state.rooms.find(r=>!r.archived);
       if(next) await selectRoom(next.id); else showEmpty();
@@ -313,53 +471,47 @@ async function updateRoomListPreference(room, changes) {
       state.extra=state.extra.filter(p=>p.roomId!==room.id);
       renderExtraPanes();
     }
-    renderRooms();
-  } catch(error) { toast(error.message); }
+    renderRooms();return true;
+  } catch(error) {if(userId===state.session?.user?.id&&epoch===sidebarEpoch)toast(error.message);return false;}
+}
+function sidebarRoomButton(room) {
+  const button=document.createElement("button");button.dataset.dockRoom=room.id;button.draggable=false;button.type="button";
+  const openIds=new Set([state.selectedRoom,...state.extra.map(pane=>pane.roomId)]);button.className=`room-item ${openIds.has(room.id)?"is-active":""}`;button.dataset.roomId=room.id;
+  const roomIcon=document.createElement("span");roomIcon.className="room-icon";roomIcon.append(icon("agent"));
+  const copy=document.createElement("span");copy.className="room-item-copy";
+  const name=document.createElement("strong");name.textContent=(room.pinned?"· ":"")+room.name;
+  const meta=document.createElement("small");meta.textContent=`${room.memberCount||0}명 · ${room.description||"공동 대화"}`;
+  copy.append(name,meta);button.append(roomIcon,copy);button.addEventListener("click",()=>{if(state.focusPane>0)assignExtra(state.focusPane-1,room.id);else selectRoom(room.id);closeSidebar();});return button;
 }
 function renderRooms() {
-  renderAgentLinks();
-  els.roomList.replaceChildren();
-  const query = $("#room-search").value.trim().toLocaleLowerCase();
-  const visibleRooms = state.rooms.filter((room) =>
-    !!room.archived === showDeletedRooms && (showDeletedRooms || (room.id!==MONITOR_ROOM)) && (room.name + " " + room.description).toLocaleLowerCase().includes(query),
-  ).sort((a,b)=>Number(!!b.pinned)-Number(!!a.pinned));
-  if (query && !visibleRooms.length) {
-    const empty = document.createElement("p");
-    empty.className = "search-empty";
-    empty.textContent = "검색 결과가 없습니다.";
-    els.roomList.append(empty);
+  const focused=els.roomList.contains(document.activeElement)?{roomId:document.activeElement.dataset.roomId,groupId:document.activeElement.dataset.groupId}:null;
+  renderAgentLinks();els.roomList.replaceChildren();$("#create-sidebar-group").disabled=!sidebarState.loaded||sidebarState.groups.length>=20;
+  const query=$("#room-search").value.trim().toLocaleLowerCase(),groups=sidebarState.groups;
+  const visibleRooms=state.rooms.filter(room=>!!room.archived===showDeletedRooms&&(showDeletedRooms||room.id!==MONITOR_ROOM)&&[room.name,room.description,groups.find(group=>group.id===room.groupId)?.name].join(" ").toLocaleLowerCase().includes(query));
+  if(query&&!visibleRooms.length){const empty=document.createElement("p");empty.className="search-empty";empty.textContent="검색 결과가 없습니다.";els.roomList.append(empty);}
+  const appendRooms=(target,rooms)=>rooms.forEach(room=>target.append(sidebarRoomButton(room)));
+  if(showDeletedRooms)appendRooms(els.roomList,visibleRooms);
+  else {
+    const pinned=visibleRooms.filter(room=>room.pinned);if(pinned.length){const heading=document.createElement("div");heading.className="room-section-label";heading.textContent="고정";els.roomList.append(heading);appendRooms(els.roomList,pinned);}
+    for(const group of groups) {
+      const rooms=visibleRooms.filter(room=>!room.pinned&&room.groupId===group.id);
+      if(query&&!rooms.length)continue;
+      const section=document.createElement("section");section.className="room-group";
+      const header=document.createElement("div");header.className="room-group-header";
+      const toggle=document.createElement("button");toggle.type="button";toggle.className="room-group-toggle";toggle.dataset.groupId=group.id;const expanded=!!query||!group.collapsed;toggle.setAttribute("aria-expanded",String(expanded));toggle.setAttribute("aria-controls","room-group-"+group.id);
+      const name=document.createElement("span");name.textContent=group.name;const count=document.createElement("small");count.textContent=String(rooms.length);toggle.append(name,count);
+      toggle.onclick=()=>{void saveSidebar({...sidebarState,groups:sidebarState.groups.map(item=>item.id===group.id?{...item,collapsed:!item.collapsed}:item)});};
+      const menu=document.createElement("button");menu.type="button";menu.className="room-group-menu";menu.textContent="…";menu.setAttribute("aria-label",group.name+" 그룹 관리");menu.onclick=()=>openSidebarGroupMenu(group);header.append(toggle,menu);
+      const list=document.createElement("div");list.id="room-group-"+group.id;list.hidden=!expanded;appendRooms(list,rooms);
+      if(!rooms.length){const empty=document.createElement("p");empty.className="room-group-empty";empty.textContent="대화를 우클릭해 이 그룹으로 옮기세요.";list.append(empty);}
+      section.append(header,list);els.roomList.append(section);
+    }
+    const ungrouped=visibleRooms.filter(room=>!room.pinned&&!groups.some(group=>group.id===room.groupId));
+    if(groups.length&&ungrouped.length){const heading=document.createElement("div");heading.className="room-section-label";heading.textContent="그룹 없음";els.roomList.append(heading);}
+    appendRooms(els.roomList,ungrouped);
   }
-  visibleRooms.forEach((room) => {
-    const button = document.createElement("button");
-    button.dataset.dockRoom = room.id;
-    button.draggable = false;
-    button.type = "button";
-    const openIds = new Set([state.selectedRoom, ...state.extra.map((pane) => pane.roomId)]);
-    button.className = `room-item ${openIds.has(room.id) ? "is-active" : ""}`;
-    button.dataset.roomId = room.id;
-    const roomIcon = document.createElement("span");
-    roomIcon.className = "room-icon";
-    roomIcon.append(icon("agent"));
-    const copy = document.createElement("span");
-    copy.className = "room-item-copy";
-    const name = document.createElement("strong");
-    name.textContent = (room.pinned ? "· " : "") + room.name;
-    const meta = document.createElement("small");
-    meta.textContent = `${room.memberCount || 0}명 · ${room.description || "공동 대화"}`;
-    copy.append(name, meta);
-    button.append(roomIcon, copy);
-    button.addEventListener("click", () => {
-      if (state.focusPane > 0) assignExtra(state.focusPane - 1, room.id);
-      else selectRoom(room.id);
-      closeSidebar();
-    });
-    els.roomList.append(button);
-  });
-  const trash=document.createElement("button");
-  trash.className="deleted-rooms-toggle";
-  trash.textContent=showDeletedRooms ? "← 대화 목록" : "삭제한 대화"+(state.rooms.some(r=>r.archived)?" ("+state.rooms.filter(r=>r.archived).length+")":"");
-  trash.onclick=()=>{showDeletedRooms=!showDeletedRooms;renderRooms();};
-  els.roomList.append(trash);
+  const trash=document.createElement("button");trash.className="deleted-rooms-toggle";trash.textContent=showDeletedRooms?"← 대화 목록":"삭제한 대화"+(state.rooms.some(room=>room.archived)?" ("+state.rooms.filter(room=>room.archived).length+")":"");trash.onclick=()=>{showDeletedRooms=!showDeletedRooms;renderRooms();};els.roomList.append(trash);
+  if(focused){const target=$$("button",els.roomList).find(button=>(focused.roomId&&button.dataset.roomId===focused.roomId)||(focused.groupId&&button.dataset.groupId===focused.groupId));target?.focus({preventScroll:true});}
 }
 function showEmpty() {
   state.selectedRoom = null;
@@ -1726,6 +1878,8 @@ function assignExtra(index, roomId) {
   void refreshExtra(index);
 }
 function bind() {
+  setupSidebarResize();
+  $("#create-sidebar-group").addEventListener("click",()=>openSidebarGroupEditor());
   $("#room-search").addEventListener("input", renderRooms);
   document.addEventListener("keydown", (event) => {
     if (
@@ -2003,6 +2157,7 @@ function setupDock() {
     const targetRoom=state.rooms.find(r=>r.id===(room?.dataset.dockRoom || dockRoomAt(Number(panel.dataset.dockIndex))));
     if(targetRoom) {
       const addAction=(label,handler)=>{const b=document.createElement("button");b.type="button";b.setAttribute("role","menuitem");b.textContent=label;b.onclick=()=>{menu.hidden=true;handler();};menu.append(b);};
+      if(sidebarState.loaded&&targetRoom.id!==MONITOR_ROOM)addAction("그룹으로 이동",()=>openRoomGroupPicker(targetRoom));
       addAction(targetRoom.pinned?"고정 해제":"상단에 고정",()=>updateRoomListPreference(targetRoom,{pinned:!targetRoom.pinned}));
       addAction(targetRoom.archived?"대화 복원":"대화 삭제",()=>{
         if(targetRoom.archived) return updateRoomListPreference(targetRoom,{archived:false});
@@ -2014,7 +2169,7 @@ function setupDock() {
       });
     }
     const reset=document.createElement("button");reset.type="button";reset.setAttribute("role","menuitem");reset.textContent="분할 닫기";reset.onclick=()=>{state.layout=2;setLayout(2);dockRects=[{x:0,y:0,w:1,h:1}];applyDockLayout();hide();};menu.append(reset);
-    Object.assign(menu.style,{left:Math.min(event.clientX,innerWidth-200)+"px",top:Math.min(event.clientY,innerHeight-210)+"px"});menu.hidden=false;action.focus();
+    menu.hidden=false;Object.assign(menu.style,{left:Math.max(8,Math.min(event.clientX,innerWidth-menu.offsetWidth-8))+"px",top:Math.max(8,Math.min(event.clientY,innerHeight-menu.offsetHeight-8))+"px"});action.focus();
   });
   document.addEventListener("pointerdown",event=>{if(!menu.contains(event.target))menu.hidden=true;});
   document.addEventListener("keydown",event=>{if(event.key==="Escape"){pendingDock=null;hide();}});

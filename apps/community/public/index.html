@@ -171,6 +171,7 @@
       </section>
       <section id="workspace-view" class="workspace-view is-hidden">
         <aside id="sidebar" class="sidebar" aria-label="대화 목록">
+          <div id="sidebar-resizer" class="sidebar-resizer" role="separator" tabindex="0" aria-label="대화 목록 너비 조절" aria-controls="sidebar" aria-orientation="vertical" aria-valuemin="200" aria-valuemax="420" aria-valuenow="280" aria-disabled="true"></div>
           <div class="sidebar-top">
             <span class="app-name">OpenClawBot</span>
             <div class="sidebar-actions">
@@ -203,7 +204,7 @@
               autocomplete="off"
             /><kbd>/</kbd></label
           >
-          <div class="sidebar-heading">대화</div>
+          <div class="sidebar-heading"><span>대화</span><button id="create-sidebar-group" type="button" aria-label="대화 그룹 만들기" disabled>+ 그룹</button></div>
           <nav id="room-list" class="room-list" aria-label="내 대화 목록"></nav>
           <div class="sidebar-bottom">
             <button id="join-room-button" class="sidebar-command" type="button">

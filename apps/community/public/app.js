@@ -2058,7 +2058,7 @@ bind();
 pwaUI = createPwaController({ api, getSession: () => state.session, toast });
 desktopUI = createDesktopUI({ api, getRoomId: () => state.selectedRoom, toast });
 setupUI = createBotSetupUI({ api, getSession: () => state.session, onSaved: refreshSetupState, toast });
-mailUI = createMailUI({ api, getSession: () => state.session, toast });
+mailUI = createMailUI({ api, getSession: () => state.session, toast, openRoom: async id => {await loadRooms();await selectRoom(id);} });
 loadSession();
 
 

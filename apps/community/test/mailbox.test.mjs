@@ -97,3 +97,21 @@ test('invalid, mismatched and oversized successful upstream responses fail close
   await assert.rejects(mailbox.read(id),{status:502});
   await assert.rejects(mailbox.send(send),{status:502});
 });
+
+test('original MIME remains internal and bounded while automatic replies preserve their marker',async()=>{
+  const mime='From: sender@example.com\r\nTo: bot@example.com\r\n\r\nRequest';
+  const calls=[];
+  const mailbox=createMailbox({env,fetchImpl:async(url,options)=>{
+    calls.push({url,options});
+    if(options.method==='POST')return Response.json({accepted:true,id:'reply',from:'bot@example.com'});
+    return new Response(mime,{headers:{'content-type':'message/rfc822'}});
+  }});
+  assert.equal((await mailbox.raw(id)).toString(),mime);
+  assert.equal(new URL(calls[0].url).searchParams.get('raw'),'1');
+  assert.equal(calls[0].options.headers.authorization,'Bearer '+privateToken);
+  await mailbox.send({action:'reply',id,text:'Result',requestId:'mail-agent-'+id,automatic:true});
+  assert.equal(JSON.parse(calls[1].options.body).automatic,true);
+  await assert.rejects(mailbox.raw('../private'),{status:400});
+  const oversized=createMailbox({env,fetchImpl:async()=>new Response('x'.repeat(10*1024*1024+1))});
+  await assert.rejects(oversized.raw(id),{status:502});
+});

@@ -15,7 +15,7 @@ export function createMailbox({ env = {}, fetchImpl = fetch } = {}) {
   } catch {}
   const token = env.COMMUNITY_MAIL_TOKEN;
   const configured = Boolean(endpoint && typeof token === 'string' && token);
-  async function request(query, payload) {
+  async function request(query, payload, raw = false) {
     if (!configured) throw failure(409, '서버에 메일함 연결 정보가 없습니다.');
     const url = new URL(endpoint);
     for (const [name, value] of Object.entries(query || {})) if (value) url.searchParams.set(name, value);
@@ -37,10 +37,11 @@ export function createMailbox({ env = {}, fetchImpl = fetch } = {}) {
       let size = 0; const chunks = [];
       for await (const chunk of response.body) {
         size += chunk.byteLength;
-        if (size > 2 * 1024 * 1024) throw new Error('Mailbox response too large');
+        if (size > (raw ? 10 : 2) * 1024 * 1024) throw new Error('Mailbox response too large');
         chunks.push(Buffer.from(chunk));
       }
-      return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      const bytes = Buffer.concat(chunks);
+      return raw ? bytes : JSON.parse(bytes.toString('utf8'));
     } catch { throw failure(502, '메일 서버 응답을 읽지 못했습니다.'); }
   }
   return {
@@ -62,12 +63,18 @@ export function createMailbox({ env = {}, fetchImpl = fetch } = {}) {
         attachments: Array.isArray(data.attachments) ? data.attachments.slice(0, 100).map(a => ({ filename: string(a?.filename, 255), mimeType: string(a?.mimeType, 120) })) : [],
         contentTrust: 'untrusted-email-content' };
     },
+    // Original MIME is only used internally for cryptographic sender verification.
+    async raw(id) {
+      if (typeof id !== 'string' || !idPattern.test(id)) throw failure(400, '메일 번호가 올바르지 않습니다.');
+      return request({ id, raw: '1' }, undefined, true);
+    },
     async send(input = {}) {
       const { action, id, to, subject, text, requestId } = input;
       if (!['send', 'reply'].includes(action)) throw failure(400, '메일 작성 또는 답장을 선택해 주세요.');
       if (typeof text !== 'string' || !text.trim() || text.length > 40000) throw failure(400, '메일 내용은 1~40,000자여야 합니다.');
       if (typeof requestId !== 'string' || !/^[a-zA-Z0-9_-]{16,100}$/.test(requestId)) throw failure(400, '메일 요청 번호가 올바르지 않습니다.');
       const payload = { action, text, requestId };
+      if (input.automatic === true) payload.automatic = true;
       if (action === 'reply') {
         if (typeof id !== 'string' || !idPattern.test(id)) throw failure(400, '답장할 메일을 선택해 주세요.');
         payload.id = id;

@@ -5,6 +5,10 @@ import { createDesktopUI } from "/desktop.js";
 import { createPwaController } from "/pwa.js";
 import { applyBrand, createBotSetupUI } from "/setup.js";
 import { createMailUI } from "/mail.js";
+import { createAgentPresence, resolveAgentPresence } from "/agent-presence.js";
+import { createNotificationCenter } from "/notification-center.js";
+import { createInviteLink, createInviteLinks } from "/invite-links.mjs";
+const inviteLinks = createInviteLinks();
 
 let dockRects = [{x:0,y:0,w:1,h:1}];
 let pendingDock = null;
@@ -35,6 +39,9 @@ let desktopUI;
 let pwaUI;
 let setupUI;
 let mailUI;
+let agentPresence;
+let notificationUI;
+const presenceErrors = new Set();
 const $ = (s, root = document) => root.querySelector(s);
 const $$ = (s, root = document) => [...root.querySelectorAll(s)];
 const els = {
@@ -56,7 +63,6 @@ const els = {
   memberPanel: $("#member-panel"),
   modelWarning: $("#model-warning"),
   demoBadge: $("#demo-badge"),
-  modelStatus: $("#model-status"),
   usage: $("#usage-label"),
   sendingStatus: $("#sending-status"),
   toast: $("#toast"),
@@ -128,23 +134,12 @@ function renderAgentLinks() {
   }
   for(const room of state.rooms.filter(r=>!r.archived&&r.id===MONITOR_ROOM)) {
     const button=document.createElement("button");button.type="button";
-    button.append(icon("agent"));
+    button.append(icon("activity"));
     const label=document.createElement("span");label.textContent="대시보드";button.append(label);
     button.onclick=()=>selectRoom(room.id);links.append(button);
   }
 }
 function icon(name) {
-  if (name === "agent" || name === "spark") {
-    const image = document.createElement("img");
-    image.className = "icon agent-art";
-    image.src = "/icons/cloud-agent-v1-192.png";
-    image.width = 28;
-    image.height = 28;
-    image.alt = "";
-    image.setAttribute("aria-hidden", "true");
-    image.draggable = false;
-    return image;
-  }
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("class", "icon");
   svg.setAttribute("aria-hidden", "true");
@@ -193,6 +188,7 @@ async function loadSession() {
 }
 $("#startup-retry").addEventListener("click", loadSession);
 function showAuth() {
+  agentPresence?.reset(); presenceErrors.clear(); notificationUI?.reset();
   setupUI?.reset();
   mailUI?.reset();
   closeContextPopover();
@@ -240,7 +236,10 @@ function showAuth() {
   closeSidebar();
   $$("dialog[open]").forEach((dialog) => dialog.close());
   $("#invite-token").textContent = "";
-  setTimeout(() => $("#login-username")?.focus(), 0);
+  const pendingSite = inviteLinks.get("site");
+  $("#register-token").hidden = Boolean(pendingSite); $("#register-token-label").hidden = Boolean(pendingSite);
+  if (pendingSite) { $("#register-token").value = pendingSite; switchAuth("register"); }
+  else { switchAuth("login"); if (inviteLinks.get("room")) showMessage(els.authMessage, "대화 초대를 받았습니다. 로그인하면 참여할 수 있습니다.", "info"); }
 }
 async function enterWorkspace() {
   applyBrand(state.session.brand);
@@ -255,12 +254,14 @@ async function enterWorkspace() {
   );
   $("#site-invite-button").classList.toggle("is-hidden", user.role !== "admin");
   renderModelConnection();
+  notificationUI?.setSession(state.session);
+  agentPresence?.set("idle", true);
   pwaUI?.setSession(state.session);
   resetSidebarState(user.id);
   const workspaceEpoch=sidebarEpoch;
   await Promise.all([loadSidebar(),loadRooms()]);
   if(state.session?.user?.id!==user.id||sidebarEpoch!==workspaceEpoch)return;
-  setupUI?.maybePrompt();
+  if (!openPendingRoomInvite()) setupUI?.maybePrompt();
   try {
     const catalog = await api("/api/models");
     if(state.session?.user?.id!==user.id||sidebarEpoch!==workspaceEpoch)return;
@@ -272,14 +273,6 @@ function renderModelConnection() {
   const model = state.session?.model || {};
   els.demoBadge.classList.toggle("is-hidden", !model.demo);
   els.modelWarning.classList.toggle("is-hidden", Boolean(model.configured) || Boolean(model.selectable));
-  els.modelStatus.classList.toggle("is-hidden", !model.configured || Boolean(model.demo));
-  const connected = model.configured
-    ? model.backend === "openclaw"
-      ? "OpenClaw 연결됨"
-      : "AI 연결됨"
-    : "";
-  els.modelStatus.textContent = [connected, model.selectable ? "API 순환" : ""].filter(Boolean).join(" · ");
-  els.modelStatus.classList.toggle("is-hidden", !els.modelStatus.textContent);
 }
 async function refreshSetupState(data, { connectionChanged }) {
   const userId=state.session?.user?.id, workspaceEpoch=sidebarEpoch;
@@ -506,7 +499,7 @@ async function updateRoomListPreference(room, changes) {
 function sidebarRoomButton(room) {
   const button=document.createElement("button");button.dataset.dockRoom=room.id;button.draggable=false;button.type="button";
   const openIds=new Set([state.selectedRoom,...state.extra.map(pane=>pane.roomId)]);button.className=`room-item ${openIds.has(room.id)?"is-active":""}`;button.dataset.roomId=room.id;
-  const roomIcon=document.createElement("span");roomIcon.className="room-icon";roomIcon.append(icon("agent"));
+  const roomIcon=document.createElement("span");roomIcon.className="room-icon";roomIcon.append(icon("chat"));
   const copy=document.createElement("span");copy.className="room-item-copy";
   const name=document.createElement("strong");name.textContent=(room.pinned?"· ":"")+room.name;
   const meta=document.createElement("small");meta.textContent=`${room.memberCount||0}명 · ${room.description||"공동 대화"}`;
@@ -560,6 +553,7 @@ async function selectRoom(id) {
     if (pane.roomId === id) pane.roomId = previous && previous !== id ? previous : null;
   });
   state.selectedRoom = id;
+  notificationUI?.markRoomRead(id);
   clearThinking(els.sendingStatus);
   const prefs = roomPreferences(id);
   $("#model-select").dataset.chosen = prefs.model || "";
@@ -659,6 +653,7 @@ async function refreshRoom(force = false) {
       return;
     const unchanged = JSON.stringify(state.roomData) === JSON.stringify(data);
     state.roomData = data;
+    notificationUI?.observeRoom(data, { userId });
     syncProgressStreams();
     if (!unchanged) {
       renderRoom(data);
@@ -759,12 +754,14 @@ function stopProgressStreams() {
   for (const entry of progressStreams.values()) entry.source?.close();
   progressStreams.clear();
   clearThinking(els.sendingStatus);
+  updateAgentPresence();
 }
 function addProgress(entry, event) {
   if (!event || typeof event.stage !== "string" || typeof event.label !== "string") return;
   const milestone = { stage: event.stage, label: event.label.slice(0, 240), at: event.at };
   if (entry.events.some(item => item.stage === milestone.stage && item.label === milestone.label && item.at === milestone.at)) return;
   entry.events.push(milestone);
+  if (entry.roomId) { if (milestone.stage === "error") presenceErrors.add(entry.roomId); else presenceErrors.delete(entry.roomId); }
   entry.events.sort((a, b) => (Number(a.at) || 0) - (Number(b.at) || 0));
   entry.events = entry.events.slice(-40);
 }
@@ -785,11 +782,12 @@ function syncProgressStreams() {
   for (const [roomId, data] of visible) {
     let entry = progressStreams.get(roomId);
     if (!entry) {
-      entry = { events: [], source: null, retryAt: 0 };
+      entry = { roomId, events: [], source: null, retryAt: 0 };
       progressStreams.set(roomId, entry);
     }
     for (const event of Array.isArray(data.progress) ? data.progress : []) addProgress(entry, event);
     if (!entry.source && Date.now() >= entry.retryAt && typeof EventSource !== "undefined") {
+      const userId = state.session?.user?.id;
       const source = new EventSource(`/api/rooms/${encodeURIComponent(roomId)}/progress`);
       entry.source = source;
       source.addEventListener("open", () => {
@@ -798,7 +796,7 @@ function syncProgressStreams() {
       });
       source.addEventListener("progress", event => {
         if (progressStreams.get(roomId) !== entry || entry.source !== source) return;
-        try { addProgress(entry, JSON.parse(event.data)); } catch { return; }
+        try { const progress = JSON.parse(event.data); addProgress(entry, progress); notificationUI?.observeProgress(roomId, progress, { userId }); } catch { return; }
         renderProgressRoom(roomId);
       });
       source.addEventListener("done", () => {
@@ -820,11 +818,21 @@ function syncProgressStreams() {
     }
     renderProgressRoom(roomId);
   }
+  updateAgentPresence();
 }
 function renderProgressRoom(roomId) {
+  updateAgentPresence();
   for (const target of $$("[data-progress-room]")) {
     if (target.dataset.progressRoom === roomId) renderProgressTarget(target, roomId);
   }
+}
+function updateAgentPresence() {
+  const rooms = [{ roomId: state.selectedRoom, data: state.roomData }, ...state.extra.map(pane => ({ roomId: pane.roomId, data: pane.data?.room?.id === pane.roomId ? pane.data : null }))].filter(room => room.roomId && room.roomId !== MONITOR_ROOM);
+  agentPresence?.set(resolveAgentPresence({
+    sending: state.sending || state.extra.some(pane => pane.sending),
+    rooms: rooms.map(room => ({ busy: !!room.data?.busy, stage: (progressStreams.get(room.roomId)?.events || room.data?.progress || []).at(-1)?.stage })),
+    hasError: rooms.some(room => presenceErrors.has(room.roomId)),
+  }), Boolean(state.session?.user));
 }
 function renderProgressTarget(target, roomId) {
   const entry = progressStreams.get(roomId);
@@ -867,9 +875,6 @@ function thinkingRow(roomId = state.selectedRoom) {
   const article = document.createElement("article");
   article.className = "message message-bot message-thinking";
   article.setAttribute("aria-label", "에이전트 진행 상황");
-  const avatar = document.createElement("div");
-  avatar.className = "avatar avatar-bot";
-  avatar.append(icon("spark"));
   const body = document.createElement("div");
   body.className = "message-body";
   const bubble = document.createElement("div");
@@ -878,7 +883,7 @@ function thinkingRow(roomId = state.selectedRoom) {
   bubble.append(...thinkParts());
   renderProgressTarget(bubble, roomId);
   body.append(bubble);
-  article.append(avatar, body);
+  article.append(body);
   return article;
 }
 const animatedMessages = new Set();
@@ -891,8 +896,7 @@ function createMessage(message) {
   if(message.id && Date.now()-message.createdAt<15000 && !animatedMessages.has(message.id)){article.classList.add("message-enter");animatedMessages.add(message.id);if(animatedMessages.size>500)animatedMessages.delete(animatedMessages.values().next().value);}
   const avatar = document.createElement("div");
   avatar.className = `avatar ${message.kind === "bot" ? "avatar-bot" : ""}`;
-  if (message.kind === "bot") avatar.append(icon("agent"));
-  else avatar.textContent = initials(message.author);
+  if (message.kind !== "bot") avatar.textContent = initials(message.author);
   const body = document.createElement("div");
   body.className = "message-body";
   const meta = document.createElement("div");
@@ -940,7 +944,8 @@ function createMessage(message) {
     });
     if (attachments.childElementCount) body.append(attachments);
   }
-  article.append(avatar, body);
+  if (message.kind !== "bot") article.append(avatar);
+  article.append(body);
   return article;
 }
 function renderBotPicker() {
@@ -978,7 +983,7 @@ function renderBotPicker() {
     const desc = document.createElement("small");
     desc.textContent = bot.description || "";
     copy.append(name, desc);
-    label.append(checkbox, icon("agent"), copy);
+    label.append(checkbox, copy);
     picker.append(label);
   });
   updateBotLabel();
@@ -1203,6 +1208,7 @@ async function submitMessage(event) {
     model: $("#model-select").value,
     effort: $("#effort-select").value,
   });
+  presenceErrors.delete(roomId);
   state.sending = true;
   updateModelAvailability();
   $("#send-button").disabled = true;
@@ -1222,6 +1228,7 @@ async function submitMessage(event) {
     await refreshRoom(true);
     await loadRooms();
   } catch (error) {
+    presenceErrors.add(roomId);
     toast(error.message);
   } finally {
     state.sending = false;
@@ -1244,6 +1251,7 @@ async function authSubmit(event, endpoint, buttonLabel) {
       method: "POST",
       body: JSON.stringify(formDataObject(form)),
     });
+    if (endpoint === "/api/register") inviteLinks.clear("site");
     form.reset();
     await enterWorkspace();
   } catch (error) {
@@ -1253,9 +1261,9 @@ async function authSubmit(event, endpoint, buttonLabel) {
   }
 }
 function openDialog(dialog) {
-  dialog.showModal();
+  if (!dialog.open) dialog.showModal();
   const first = dialog.querySelector(
-    "input, textarea, button:not(.modal-close)",
+    "input:not([hidden]), textarea:not([hidden]), button:not(.modal-close)",
   );
   setTimeout(() => first?.focus(), 0);
 }
@@ -1489,6 +1497,7 @@ async function joinRoom(event) {
       method: "POST",
       body: JSON.stringify({ token: $("#join-token").value.trim() }),
     });
+    inviteLinks.clear("room");
     closeDialog($("#join-dialog"));
     await loadRooms();
     await selectRoom(data.room.id);
@@ -1502,12 +1511,12 @@ async function joinRoom(event) {
 async function makeInvite(path, title) {
   try {
     const data = await api(path, { method: "POST", body: "{}" });
-    $("#invite-token").textContent = data.token;
+    $("#invite-token").textContent = createInviteLink(title, data.token);
     $("#invite-expires").textContent = data.expiresAt
       ? `만료: ${formatDate(data.expiresAt)}`
       : "";
     $(".invite-modal h2").textContent =
-      title === "site" ? "가입 초대 코드" : "대화 초대 코드";
+      title === "site" ? "가입 초대 링크" : "대화 초대 링크";
     $(".invite-modal .eyebrow").textContent =
       title === "site" ? "SITE INVITATION" : "ROOM INVITATION";
     $("#invite-dialog").dataset.title = title;
@@ -1528,6 +1537,7 @@ function saveRoomPreferences(id, prefs) {
   try { localStorage.setItem("community-model:" + state.session.user.id + ":" + id, JSON.stringify(prefs)); } catch {}
 }
 function updateModelAvailability() {
+  updateAgentPresence();
   for(const select of $$(".model-select")) {
     const pane=select._pane||null,owner=roomContextOwner(pane);
     const disabled=!owner.roomId||owner.busy;
@@ -1820,6 +1830,7 @@ async function submitPane(event, index) {
   const input = $("textarea", form);
   const text = input.value.trim();
   if (!text) return;
+  presenceErrors.delete(pane.roomId);
   pane.sending = true;
   updateModelAvailability();
   try {
@@ -1840,6 +1851,7 @@ async function submitPane(event, index) {
     if (Array.isArray(result.models)) applyModels(result.models);
     await refreshExtra(index);
   } catch (error) {
+    presenceErrors.add(pane.roomId);
     toast(error.message);
   } finally {
     pane.sending = false;
@@ -1850,13 +1862,14 @@ async function refreshExtra(index) {
   const pane = state.extra[index];
   if (!pane?.roomId || pane.busy) return;
   const request = ++pane.request;
-  const roomId = pane.roomId;
+  const roomId = pane.roomId, userId = state.session?.user?.id;
   pane.busy = true;
   try {
     const data = await api(`/api/rooms/${encodeURIComponent(roomId)}`);
-    if (state.extra[index] !== pane || pane.roomId !== roomId || pane.request !== request) return;
+    if (state.session?.user?.id !== userId || state.extra[index] !== pane || pane.roomId !== roomId || pane.request !== request) return;
     const unchanged = JSON.stringify(pane.data) === JSON.stringify(data);
     pane.data = data;
+    notificationUI?.observeRoom(data, { userId });
     syncProgressStreams();
     if (unchanged) return;
     const section = $$(".extra-pane")[index];
@@ -1958,9 +1971,6 @@ function bind() {
   ["#create-room-button", "#empty-create-button"].forEach((selector) =>
     $(selector).addEventListener("click", startNewSession),
   );
-  $("#join-room-button").addEventListener("click", () =>
-    openDialog($("#join-dialog")),
-  );
   $("#room-form").addEventListener("submit", createRoom);
   $("#join-form").addEventListener("submit", joinRoom);
   $("#composer-form").addEventListener("submit", submitMessage);
@@ -2024,9 +2034,9 @@ function bind() {
   $("#copy-invite").addEventListener("click", async () => {
     try {
       await navigator.clipboard.writeText($("#invite-token").textContent);
-      toast("초대 코드를 복사했습니다.");
+      toast("초대 링크를 복사했습니다.");
     } catch {
-      toast("복사하지 못했습니다. 코드를 직접 선택해주세요.");
+      toast("복사하지 못했습니다. 링크를 직접 선택해주세요.");
     }
   });
   $("#mobile-menu").addEventListener("click", () => {
@@ -2054,9 +2064,27 @@ function bind() {
     }),
   );
 }
+function openPendingRoomInvite() {
+  const token = inviteLinks.get("room");
+  if (!state.session?.user || !token) return false;
+  $("#join-token").value = token; $("#join-token").hidden = true; $("#join-token-label").hidden = true;
+  $("#join-invite-note").classList.remove("is-hidden"); openDialog($("#join-dialog")); return true;
+}
+window.addEventListener("hashchange", () => {
+  if (!inviteLinks.capture()) return;
+  if (state.session?.user) openPendingRoomInvite(); else showAuth();
+});
 bind();
+agentPresence = createAgentPresence({ mount: $("#agent-presence") });
+notificationUI = createNotificationCenter({ mount: $("#notification-center"), openRoom: async id => { await loadRooms(); await selectRoom(id); }, toast });
 pwaUI = createPwaController({ api, getSession: () => state.session, toast });
 desktopUI = createDesktopUI({ api, getRoomId: () => state.selectedRoom, toast });
+const workspaceButton = $(".topbar-actions .desktop-button");
+if (workspaceButton) {
+  const monitor = document.createElementNS("http://www.w3.org/2000/svg", "svg"); monitor.setAttribute("class", "icon"); monitor.setAttribute("viewBox", "0 0 24 24"); monitor.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path"); path.setAttribute("d", "M4 4h16v12H4zM12 16v4m-4 0h8"); monitor.append(path); workspaceButton.replaceChildren(monitor);
+  workspaceButton.setAttribute("aria-label", "작업 공간 열기 또는 닫기"); workspaceButton.title = "작업 공간";
+}
 setupUI = createBotSetupUI({ api, getSession: () => state.session, onSaved: refreshSetupState, toast });
 mailUI = createMailUI({ api, getSession: () => state.session, toast, openRoom: async id => {await loadRooms();await selectRoom(id);} });
 loadSession();
@@ -2202,6 +2230,5 @@ function setupDock() {
   });
   document.addEventListener("pointerdown",event=>{if(!menu.contains(event.target))menu.hidden=true;});
   document.addEventListener("keydown",event=>{if(event.key==="Escape"){pendingDock=null;hide();}});
-  $("#split-add").addEventListener("click",()=>begin(state.selectedRoom));
   applyDockLayout();
 }

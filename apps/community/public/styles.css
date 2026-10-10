@@ -1439,3 +1439,29 @@ button:active .agent-art { transform:scale(.94); }
 .dock-menu { max-height:calc(100dvh - 24px); overflow:auto; }
 @media(max-width:720px) { .sidebar-resizer { display:none; } .sidebar { width:min(300px,calc(100vw - 36px)); } .room-group-menu { opacity:1!important; } }
 @media(prefers-reduced-motion:reduce) { .sidebar-resizer::before,.sidebar-resizer::after,.room-group-toggle::before { transition:none; } }
+
+/* Compact controls frame the single agent in the center. */
+.topbar { display:grid; grid-template-columns:minmax(0,1fr) 100px minmax(0,1fr); min-height:116px; height:116px; gap:16px; position:relative; }
+.topbar-leading { display:flex; align-items:center; gap:9px; min-width:0; }
+.topbar-leading > .icon-button { flex:0 0 auto; }
+.topbar .header-identity { min-width:0; }
+.topbar-actions { justify-content:flex-end; min-width:0; gap:6px; }
+.topbar-actions > .icon-button { flex:0 0 auto; }
+.topbar .demo-badge { position:absolute; bottom:5px; left:18px; max-width:calc(50% - 74px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10px; }
+.topbar .desktop-button { width:38px; height:38px; border:1px solid #ffffff18; background:var(--surface); border-radius:12px; }
+.topbar .desktop-button:hover,.topbar .desktop-button[aria-expanded="true"] { background:var(--selected); border-color:#b7a0ed55; }
+.topbar .desktop-button .icon { width:21px; height:21px; }
+.topbar .members-button { min-width:32px; }
+.room-item { grid-template-columns:24px minmax(0,1fr); gap:8px; min-height:52px; }
+.room-icon { width:24px; height:28px; }
+.room-icon .icon { width:17px; height:17px; opacity:.65; }
+.message-bot { gap:0; }
+.message-bot .message-body { min-width:0; }
+.startup-view .agent-art.startup-logo { width:144px; height:144px; }
+.auth-logo { width:96px; height:96px; }
+.token-box code { overflow-wrap:anywhere; word-break:break-word; }
+@media(max-width:900px) { .topbar { gap:10px; padding:0 12px; } .topbar-actions { gap:2px; } .topbar .members-button { width:32px; } .topbar #member-count { display:none; } }
+@media(max-width:720px) { .topbar { grid-template-columns:minmax(0,1fr) 90px minmax(0,1fr); min-height:106px; height:106px; gap:5px; padding:0 9px; } .topbar-leading { gap:4px; } .topbar h1 { font-size:12px; } .topbar-actions { gap:0; flex-wrap:wrap; align-content:center; } .topbar-actions .icon-button { width:30px; height:32px; } .topbar .desktop-button { width:34px; height:34px; margin-left:2px; } .topbar .demo-badge { left:12px; bottom:4px; } }
+@media(max-width:420px) { .topbar .header-identity { position:absolute; left:12px; top:78px; max-width:calc(50% - 62px); } .topbar .header-identity h1 { font-size:10px; } .topbar .members-button { display:none; } .topbar .demo-badge { display:none; } }
+
+#register-token[hidden],#register-token-label[hidden],#join-token[hidden],#join-token-label[hidden] { display:none; }

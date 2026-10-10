@@ -23,7 +23,12 @@ def verify(origin, expected):
         manifest = json.load(response)
     if not brand.get('name') or manifest.get('name') != brand['name']:
         raise RuntimeError('Installed app name does not match the configured brand')
-    for path in ['/', '/app.js', '/setup.js', '/setup.css', '/setup-guide', '/desktop.js', '/manifest.webmanifest', '/sw.js', '/icons/cloud-agent-v1-192.png', '/icons/cloud-agent-v1-maskable-512.png']:
+    for path in ['/', '/app.js', '/agent-presence.js', '/agent-presence.css',
+                 '/notification-center.js', '/notification-center.css', '/invite-links.mjs',
+                 '/media/agent/idle.mp4', '/media/agent/working.mp4',
+                 '/media/agent/waiting.mp4', '/media/agent/error.mp4', '/media/agent/idle-poster.jpg',
+                 '/setup.js', '/setup.css', '/setup-guide', '/desktop.js', '/manifest.webmanifest',
+                 '/sw.js', '/icons/cloud-agent-v1-192.png', '/icons/cloud-agent-v1-maskable-512.png']:
         with urllib.request.urlopen(origin + path, timeout=30) as response:
             if response.status != 200 or not response.read(1):
                 raise RuntimeError('Public asset unavailable: ' + path)

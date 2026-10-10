@@ -642,10 +642,15 @@ export async function startCommunity(options = {}) {
       const expected = origin || boundOrigin;
       if (req.headers.origin && req.headers.origin !== expected)
         throw failure(403, "허용되지 않은 출처입니다.");
-      if (req.headers["sec-fetch-site"] === "cross-site")
-        throw failure(403, "허용되지 않은 출처입니다.");
       const url = new URL(req.url, "http://local");
       const method = req.method;
+      // Invitation links from webmail may navigate to the public app shell.
+      // API calls, frames and subresources retain the cross-site restriction.
+      const publicNavigation = ["GET", "HEAD"].includes(method) &&
+        url.pathname === "/" && req.headers["sec-fetch-mode"] === "navigate" &&
+        req.headers["sec-fetch-dest"] === "document";
+      if (req.headers["sec-fetch-site"] === "cross-site" && !publicNavigation)
+        throw failure(403, "허용되지 않은 출처입니다.");
       if (url.pathname === "/api/brand" && method === "GET") return reply(res,200,brand());
       if (url.pathname === "/api/health" && method === "GET")
         return reply(res, 200, { ok: true, release: env.COMMUNITY_RELEASE ?? "development" });
@@ -658,6 +663,16 @@ export async function startCommunity(options = {}) {
           "/message-format.mjs": ["message-format.mjs", "text/javascript"],
           "/model-picker.mjs": ["model-picker.mjs", "text/javascript"],
           "/app.js": ["app.js", "text/javascript"],
+          "/agent-presence.js": ["agent-presence.js", "text/javascript"],
+          "/agent-presence.css": ["agent-presence.css", "text/css"],
+          "/notification-center.js": ["notification-center.js", "text/javascript"],
+          "/notification-center.css": ["notification-center.css", "text/css"],
+          "/invite-links.mjs": ["invite-links.mjs", "text/javascript"],
+          "/media/agent/idle.mp4": ["media/agent/idle.mp4", "video/mp4"],
+          "/media/agent/working.mp4": ["media/agent/working.mp4", "video/mp4"],
+          "/media/agent/waiting.mp4": ["media/agent/waiting.mp4", "video/mp4"],
+          "/media/agent/error.mp4": ["media/agent/error.mp4", "video/mp4"],
+          "/media/agent/idle-poster.jpg": ["media/agent/idle-poster.jpg", "image/jpeg"],
           "/setup-guide": ["../scripts/README.md", "text/plain"],
           "/setup.js": ["setup.js", "text/javascript"],
           "/setup.css": ["setup.css", "text/css"],
@@ -699,13 +714,33 @@ export async function startCommunity(options = {}) {
         const content = await readFile(
           join(options.publicDir ?? join(HERE, "public"), file[0]),
         );
-        res.writeHead(200, {
-          "content-type": file[1] + (file[1] === "image/png" ? "" : "; charset=utf-8"),
-          "cache-control": "no-cache",
-        });
         const responseContent = url.pathname === "/manifest.webmanifest"
-          ? JSON.stringify({...JSON.parse(content.toString()),name:setupVault.name,short_name:setupVault.name}) : content;
-        res.end(method === "HEAD" ? undefined : responseContent);
+          ? Buffer.from(JSON.stringify({...JSON.parse(content.toString()),name:setupVault.name,short_name:setupVault.name})) : content;
+        const headers = {
+          "content-type": file[1] + (file[1].startsWith("text/") || file[1] === "application/manifest+json" ? "; charset=utf-8" : ""),
+          "content-length": responseContent.length,
+          "cache-control": "no-cache",
+        };
+        let status = 200, body = responseContent;
+        if (file[1] === "video/mp4") {
+          headers["accept-ranges"] = "bytes";
+          if (req.headers.range && method === "GET") {
+            const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range);
+            const start = range?.[1] ? Number(range[1]) : Math.max(0, content.length - Number(range?.[2]));
+            const end = range?.[1] && range?.[2] ? Math.min(Number(range[2]), content.length - 1) : content.length - 1;
+            if (!range || (!range[1] && !range[2]) || !Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start > end || start >= content.length) {
+              res.writeHead(416, {"content-range": `bytes */${content.length}`, "content-length": 0, "accept-ranges": "bytes"});
+              res.end();
+              return;
+            }
+            status = 206;
+            body = content.subarray(start, end + 1);
+            headers["content-range"] = `bytes ${start}-${end}/${content.length}`;
+            headers["content-length"] = body.length;
+          }
+        }
+        res.writeHead(status, headers);
+        res.end(method === "HEAD" ? undefined : body);
         return;
       }
       const user = userFor(req);

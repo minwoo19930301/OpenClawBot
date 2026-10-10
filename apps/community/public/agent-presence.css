@@ -1,0 +1,6 @@
+/* One visible character, with motion driven by actual task state. */
+.agent-presence { width:100px; height:100px; justify-self:center; align-self:center; border-radius:30px; background:#fff url('/media/agent/idle-poster.jpg') center/cover no-repeat; overflow:hidden; box-shadow:0 3px 20px #0002; isolation:isolate; }
+.agent-presence-video { display:block; width:100%; height:100%; object-fit:cover; pointer-events:none; }
+.agent-presence.is-paused .agent-presence-video { opacity:0; }
+@media(max-width:720px) { .agent-presence { width:90px; height:90px; border-radius:27px; } }
+@media(prefers-reduced-motion:reduce) { .agent-presence-video { display:none; } }

@@ -16,6 +16,8 @@
     <link rel="stylesheet" href="/desktop.css" />
     <link rel="stylesheet" href="/setup.css" />
     <link rel="stylesheet" href="/mail.css" />
+    <link rel="stylesheet" href="/agent-presence.css" />
+    <link rel="stylesheet" href="/notification-center.css" />
   </head>
   <body>
     <svg
@@ -74,7 +76,7 @@
     </svg>
     <div id="app">
       <section id="startup-view" class="startup-view" aria-label="CustomCloudBot 불러오는 중">
-        <img class="icon agent-art startup-logo" src="/icons/cloud-agent-v1-192.png" alt="" width="96" height="96" fetchpriority="high" decoding="sync" draggable="false">
+        <img class="icon agent-art startup-logo" src="/icons/cloud-agent-v1-192.png" alt="" width="144" height="144" fetchpriority="high" decoding="sync" draggable="false">
         <strong data-product-name>CustomCloudBot</strong>
         <p id="startup-status" role="status">내 공간을 불러오고 있어요</p>
         <button id="startup-retry" class="is-hidden" type="button">다시 시도</button>
@@ -83,7 +85,7 @@
       <section id="auth-view" class="auth-view is-hidden" aria-labelledby="auth-title">
         <div class="auth-panel">
           <div class="auth-brand">
-            <img class="brand-art auth-logo" src="/icons/cloud-agent-v1-192.png" alt="" width="64" height="64" draggable="false">
+            <img class="brand-art auth-logo" src="/icons/cloud-agent-v1-192.png" alt="" width="96" height="96" draggable="false">
             <h1 id="auth-title" data-product-name>CustomCloudBot</h1>
           </div>
           <p class="auth-description">초대받은 계정으로 로그인하세요.</p>
@@ -155,7 +157,7 @@
               required
               minlength="10"
             />
-            <label for="register-token">가입 초대 코드</label
+            <label id="register-token-label" for="register-token">가입 초대 코드</label
             ><input
               id="register-token"
               name="inviteToken"
@@ -179,7 +181,7 @@
         <aside id="sidebar" class="sidebar" aria-label="대화 목록">
           <div id="sidebar-resizer" class="sidebar-resizer" role="separator" tabindex="0" aria-label="대화 목록 너비 조절" aria-controls="sidebar" aria-orientation="vertical" aria-valuemin="200" aria-valuemax="420" aria-valuenow="280" aria-disabled="true"></div>
           <div class="sidebar-top">
-            <span class="app-name"><img class="brand-art sidebar-logo" src="/icons/cloud-agent-v1-192.png" alt="" width="30" height="30" draggable="false"><span data-product-name>CustomCloudBot</span></span>
+            <span class="app-name"><span data-product-name>CustomCloudBot</span></span>
             <div class="sidebar-actions">
               <button
                 id="create-room-button"
@@ -213,10 +215,6 @@
           <div class="sidebar-heading"><span>대화</span><button id="create-sidebar-group" type="button" aria-label="대화 그룹 만들기" disabled>+ 그룹</button></div>
           <nav id="room-list" class="room-list" aria-label="내 대화 목록"></nav>
           <div class="sidebar-bottom">
-            <button id="join-room-button" class="sidebar-command" type="button">
-              <svg class="icon" aria-hidden="true"><use href="#i-join" /></svg
-              >초대 코드로 참여
-            </button>
             <button
               id="site-invite-button"
               class="sidebar-command is-hidden"
@@ -227,8 +225,6 @@
             </button>
             <div class="pwa-tools" aria-label="앱 및 알림 설정">
               <button id="install-button" class="sidebar-command is-hidden" type="button">앱으로 설치</button>
-              <button id="push-button" class="sidebar-command is-hidden" type="button">알림 켜기</button>
-              <button id="test-push-button" class="sidebar-command is-hidden" type="button">테스트 알림 보내기</button>
             </div>
             <div class="profile-row">
               <div id="profile-avatar" class="avatar">?</div>
@@ -245,6 +241,7 @@
         <div id="sidebar-scrim" class="sidebar-scrim"></div>
         <main class="main-panel">
           <header class="topbar">
+            <div class="topbar-leading">
             <button
               id="mobile-menu"
               class="icon-button"
@@ -254,20 +251,18 @@
               <svg class="icon"><use href="#i-menu" /></svg>
             </button>
             <div class="header-identity">
-              <span class="header-avatar"
-                ><img class="icon agent-art" src="/icons/cloud-agent-v1-192.png" alt="" width="28" height="28" draggable="false"></span>
               <h1 id="room-title">대화</h1>
             </div>
+            </div>
+            <div id="agent-presence" class="agent-presence" aria-label="에이전트"></div>
             <span id="mobile-room-title" class="sr-only"></span
             ><span id="room-kicker" class="sr-only"></span>
             <div class="topbar-actions">
-              <button id="split-add" type="button" class="text-button" title="대화를 우클릭하거나 드래그해서 배치">분할 보기</button>
               <span
                 id="demo-badge"
                 class="demo-badge is-hidden"
                 title="실제 AI가 연결되지 않은 기능 미리보기"
                 >데모 · 실제 AI 미연결</span
-              ><span id="model-status" class="model-status is-hidden" role="status"></span
               ><button
                 id="members-toggle"
                 class="icon-button members-button"
@@ -275,7 +270,7 @@
                 aria-label="참여자 보기"
                 title="참여자"
               >
-                <img class="icon agent-art" src="/icons/cloud-agent-v1-192.png" alt="" width="28" height="28" draggable="false"><span id="member-count">0</span></button
+                <svg class="icon" aria-hidden="true"><use href="#i-people" /></svg><span id="member-count">0</span></button
               ><button
                 id="room-invite-button"
                 class="icon-button is-hidden"
@@ -285,12 +280,13 @@
               >
                 <svg class="icon"><use href="#i-invite" /></svg>
               </button>
+              <div id="notification-center"></div>
             </div>
           </header>
           <div id="pane-grid" class="pane-grid" data-panes="1">
           <section id="empty-state" class="empty-state">
             <h2>새 대화</h2>
-            <p>대화를 만들거나 초대 코드로 참여하세요.</p>
+            <p>대화를 만들어 시작하세요.</p>
             <button
               id="empty-create-button"
               class="outline-button"
@@ -471,7 +467,8 @@
             <svg class="icon"><use href="#i-close" /></svg>
           </button>
         </div>
-        <label for="join-token">대화 초대 코드</label
+        <p id="join-invite-note" class="modal-copy is-hidden">초대받은 대화에 참여할까요?</p>
+        <label id="join-token-label" for="join-token">대화 초대 코드</label
         ><input
           id="join-token"
           name="token"
@@ -489,7 +486,7 @@
     <dialog id="invite-dialog" class="modal invite-modal">
       <form method="dialog">
         <div class="modal-head">
-          <h2>초대 코드</h2>
+          <h2>초대 링크</h2>
           <button
             class="icon-button modal-close"
             type="button"

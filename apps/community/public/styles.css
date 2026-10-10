@@ -1269,9 +1269,9 @@ button:active:not(:disabled) { filter:brightness(.9); }
 .message-enter {animation:soft-arrival 460ms cubic-bezier(.22,1,.36,1) both}
 @keyframes soft-arrival {from{opacity:0;transform:translateY(14px) scale(.985);filter:blur(2px)}to{opacity:1;transform:none;filter:blur(0)}}
 
-.agent-workspaces {display:flex;gap:6px;padding:6px 12px 12px}
-.agent-workspaces button {display:flex;align-items:center;gap:6px;flex:1;padding:8px;border:1px solid #ffffff10;border-radius:9px;background:#ffffff03;color:#adb4bf;font-size:11px}
-.agent-workspaces .icon {width:16px;height:16px}
+.agent-workspaces {display:grid;grid-template-columns:minmax(0,1fr);gap:6px;padding:6px 12px 12px}
+.agent-workspaces button {display:flex;align-items:center;gap:8px;min-width:0;padding:8px 10px;border:1px solid #ffffff10;border-radius:9px;background:#ffffff03;color:#adb4bf;font-size:11px;white-space:nowrap;text-align:left}
+.agent-workspaces .icon {width:16px;height:16px;flex-shrink:0}
 .avatar-bot {width:30px;height:30px;border-radius:9px;background:#ffffff06;color:#b9c5d7}
 .avatar-bot .icon {width:20px;height:20px}
 .bot-option > .icon {width:22px;height:22px;margin-right:8px}

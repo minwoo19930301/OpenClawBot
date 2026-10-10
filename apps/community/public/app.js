@@ -4,6 +4,7 @@ import { recommendedModels, modelLabel, filterModels } from "/model-picker.mjs";
 import { createDesktopUI } from "/desktop.js";
 import { createPwaController } from "/pwa.js";
 import { applyBrand, createBotSetupUI } from "/setup.js";
+import { createMailUI } from "/mail.js";
 
 let dockRects = [{x:0,y:0,w:1,h:1}];
 let pendingDock = null;
@@ -33,6 +34,7 @@ const state = {
 let desktopUI;
 let pwaUI;
 let setupUI;
+let mailUI;
 const $ = (s, root = document) => root.querySelector(s);
 const $$ = (s, root = document) => [...root.querySelectorAll(s)];
 const els = {
@@ -121,6 +123,7 @@ function renderAgentLinks() {
   links.replaceChildren();
   if(state.session?.user?.role==="admin") {
     const setup=document.createElement("button");setup.type="button";setup.textContent="내 봇 설정";setup.onclick=()=>void setupUI?.open();links.append(setup);
+    const mail=document.createElement("button");mail.type="button";mail.append(icon("mail"));const mailLabel=document.createElement("span");mailLabel.textContent="메일";mail.append(mailLabel);mail.onclick=()=>void mailUI?.open();links.append(mail);
     const hub=document.createElement("button");hub.textContent="통합 관리";hub.onclick=openCapabilityHub;links.append(hub);
   }
   for(const room of state.rooms.filter(r=>!r.archived&&r.id===MONITOR_ROOM)) {
@@ -191,6 +194,7 @@ async function loadSession() {
 $("#startup-retry").addEventListener("click", loadSession);
 function showAuth() {
   setupUI?.reset();
+  mailUI?.reset();
   closeContextPopover();
   resetSidebarState();
   modelChanges.clear();
@@ -2054,6 +2058,7 @@ bind();
 pwaUI = createPwaController({ api, getSession: () => state.session, toast });
 desktopUI = createDesktopUI({ api, getRoomId: () => state.selectedRoom, toast });
 setupUI = createBotSetupUI({ api, getSession: () => state.session, onSaved: refreshSetupState, toast });
+mailUI = createMailUI({ api, getSession: () => state.session, toast });
 loadSession();
 
 

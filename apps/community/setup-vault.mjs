@@ -39,13 +39,24 @@ const safeFile = path => {
   if (!info.isFile() || info.size > 1024 * 1024) throw new Error('Invalid vault file');
   chmodSync(path, 0o600);
 };
+const RESOURCE_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
+const resourceCategory = name => /^(?:GROQ|GEMINI|GOOGLE_API|HUGGING|HF_|NVIDIA|COHERE|OPENROUTER|OPENAI|XAI|COMMUNITY_LLM)/.test(name) ? 'ai'
+  : /^(?:NAVER_MAIL|COMMUNITY_MAIL|OPENCLAW_MAIL|RESEND)/.test(name) ? 'mail'
+  : /^(?:OCI|ORACLE|AWS|AZURE|GCP|CLOUDFLARE|CF_|GITHUB|GITLAB|SSH)/.test(name) ? 'infrastructure'
+  : /^(?:KAKAO|META|TAVILY|ELEVENLABS|REPLICATE|NAVER_COMMERCE|FIRECRAWL|FAL|JINA|CLOUDINARY|TELEGRAM)/.test(name) ? 'service' : 'other';
+function resourceValues(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length > 2048) throw invalid('키 모음 형식을 확인해 주세요.');
+  const entries = Object.entries(value);
+  if (entries.some(([name, item]) => !RESOURCE_NAME.test(name) || ['__proto__', 'prototype', 'constructor'].includes(name) || typeof item !== 'string' || item.length > 131072 || item.includes('\0'))) throw invalid('키 모음의 이름 또는 값 형식이 잘못되었습니다.');
+  return Object.fromEntries(entries);
+}
 
 /** Only encrypted credentials are persisted. The local key must be backed up with the vault. */
 export function createSetupVault(dataDir, env = {}) {
   const path = join(dataDir, 'setup-vault.json');
   const keyPath = join(dataDir, 'setup-vault.key');
   let key;
-  let state = { version: 1, profile: { displayName: DEFAULT_BOT_NAME, cloud: '', domain: '', mail: '' }, providers: [], gateway: null, backend: '', completed: false };
+  let state = { version: 1, profile: { displayName: DEFAULT_BOT_NAME, cloud: '', domain: '', mail: '' }, providers: [], resources: [], gateway: null, backend: '', completed: false };
   try {
     if (existsSync(keyPath)) { safeFile(keyPath); key = readFileSync(keyPath); if (key.length !== 32) throw new Error('Invalid key'); }
     if (existsSync(path)) {
@@ -57,6 +68,12 @@ export function createSetupVault(dataDir, env = {}) {
       decipher.setAuthTag(Buffer.from(saved.tag, 'base64'));
       state = JSON.parse(Buffer.concat([decipher.update(Buffer.from(saved.data, 'base64')), decipher.final()]).toString('utf8'));
       if (state.version !== 1 || !state.profile || !Array.isArray(state.providers)) throw new Error('Invalid state');
+      state.resources ??= [];
+      if (!Array.isArray(state.resources) || state.resources.length > 32) throw new Error('Invalid resources');
+      for (const collection of state.resources) {
+        if (!collection || !/^[a-zA-Z0-9_.-]{1,80}$/.test(collection.source)) throw new Error('Invalid resource source');
+        collection.values = resourceValues(collection.values);
+      }
     }
   } catch { throw new Error('설정 Vault를 읽지 못했습니다. Vault와 암호화 키를 함께 복구해 주세요. 기존 파일은 변경하지 않았습니다.'); }
 
@@ -74,12 +91,24 @@ export function createSetupVault(dataDir, env = {}) {
     renameSync(tmp, path);
     state = next;
   }
+  // Server-only copy. Never attach these values to an HTTP response or process.env.
+  function resourceEnv() {
+    return Object.assign({}, ...state.resources.map(collection => collection.values));
+  }
+  function importedProviders() { return readProviders(resourceEnv()); }
   function runtimeEnv() {
     const next = { ...env };
     // Existing environment credentials stay intact; additions are separate slots.
     let prior = [];
     try { const parsed = JSON.parse(env.COMMUNITY_LLM_PROVIDERS || '[]'); if (Array.isArray(parsed)) prior = parsed; } catch {}
-    next.COMMUNITY_LLM_PROVIDERS = JSON.stringify([...prior, ...state.providers.map(p => ({ name: p.provider, baseUrl: p.baseUrl, apiKey: p.apiKey, model: p.model }))]);
+    const configured = state.providers.map(p => ({ name: p.provider, baseUrl: p.baseUrl, apiKey: p.apiKey, model: p.model }));
+    const seen = new Set(readProviders({ ...env, COMMUNITY_LLM_PROVIDERS: JSON.stringify([...prior, ...configured]) }).map(p => p.baseUrl + '\n' + p.apiKey));
+    const imported = importedProviders().filter(p => {
+      const fingerprint = p.baseUrl + '\n' + p.apiKey;
+      if (seen.has(fingerprint)) return false;
+      seen.add(fingerprint); return true;
+    }).map(({ name, baseUrl, apiKey, model }) => ({ name, baseUrl, apiKey, ...(model ? { model } : {}) }));
+    next.COMMUNITY_LLM_PROVIDERS = JSON.stringify([...prior, ...configured, ...imported]);
     if (state.gateway?.enabled) {
       next.COMMUNITY_OPENCLAW_BASE_URL = state.gateway.baseUrl;
       next.COMMUNITY_OPENCLAW_TOKEN = state.gateway.token;
@@ -91,17 +120,33 @@ export function createSetupVault(dataDir, env = {}) {
   function view({ configured = false, activeBackend = 'none', subscriptions = [] } = {}) {
     const effective = runtimeEnv();
     const gatewayConfigured = Boolean(effective.COMMUNITY_OPENCLAW_BASE_URL && effective.COMMUNITY_OPENCLAW_TOKEN);
-    const environment = readProviders(env).map((p, i) => ({ id: 'environment-' + i, provider: p.name, name: p.name, baseUrl: p.baseUrl, model: env[p.name.toUpperCase() + '_MODEL'] || '', hasKey: true, source: 'environment' }));
+    const environment = readProviders(env).map((p, i) => ({ id: 'environment-' + i, provider: p.name, name: p.name, baseUrl: p.baseUrl, model: p.model || '', hasKey: true, source: 'environment' }));
+    const imported = importedProviders().map((p, i) => ({ id: 'imported-' + i, provider: p.name, name: AI_CATALOG.find(c => c.id === p.name)?.name || p.name, baseUrl: p.baseUrl, model: p.model || '', hasKey: true, source: 'imported' }));
     return {
       profile: { ...state.profile }, setupRequired: !state.completed && !configured,
-      providers: [...environment, ...state.providers.map(({ apiKey, ...p }) => ({ ...p, name: AI_CATALOG.find(c => c.id === p.provider)?.name || p.provider, hasKey: Boolean(apiKey), source: 'vault' }))],
+      providers: [...environment, ...state.providers.map(({ apiKey, ...p }) => ({ ...p, name: AI_CATALOG.find(c => c.id === p.provider)?.name || p.provider, hasKey: Boolean(apiKey), source: 'vault' })), ...imported],
+      resources: state.resources.flatMap(collection => Object.entries(collection.values).map(([name, value]) => ({ name, hasValue: Boolean(value), source: collection.source, category: resourceCategory(name) }))),
       catalog: AI_CATALOG,
       gateway: { configured: gatewayConfigured, hasToken: gatewayConfigured, baseUrl: effective.COMMUNITY_OPENCLAW_BASE_URL || '', agentId: effective.COMMUNITY_OPENCLAW_AGENT_ID || 'default', source: state.gateway?.enabled ? 'vault' : gatewayConfigured ? 'environment' : null },
       subscriptions, activeBackend,
     };
   }
   return {
-    view, runtimeEnv,
+    view, runtimeEnv, resourceEnv,
+    importResources(input) {
+      const source = str(input?.source || 'imported-env', 80);
+      if (!/^[a-zA-Z0-9_.-]{1,80}$/.test(source)) throw invalid('키 모음 출처 이름을 확인해 주세요.');
+      const values = resourceValues(input?.values), existing = resourceEnv();
+      const conflicts = Object.keys(values).filter(name => Object.hasOwn(existing, name) && existing[name] !== values[name]);
+      if (conflicts.length) throw Object.assign(new Error('기존 키 모음을 보존했습니다. 다른 값이 있는 이름: ' + conflicts.join(', ')), { status: 409, conflicts });
+      const previous = state.resources.find(collection => collection.source === source);
+      if (!previous && state.resources.length >= 32) throw invalid('키 모음은 최대 32개입니다.');
+      const merged = resourceValues({ ...previous?.values, ...values });
+      if (!previous || Object.keys(merged).length !== Object.keys(previous.values).length) {
+        save({ ...state, resources: [...state.resources.filter(collection => collection.source !== source), { source, values: merged }] });
+      }
+      return { source, count: Object.keys(merged).length, imported: Object.keys(values).length };
+    },
     get name() { return state.profile.displayName; },
     get backend() { return state.backend; },
     profile(input) {

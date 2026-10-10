@@ -17,6 +17,7 @@ import { connectedServiceTools, CONNECTED_SERVICE_PROMPT, createIntegrations } f
 import { ApiLlm } from "./model.mjs";
 import { createUsageStore } from "./usage.mjs";
 import { createSetupVault } from "./setup-vault.mjs";
+import { createMailbox } from "./mailbox.mjs";
 import { SUBSCRIPTION_CONNECTIONS } from "./subscription-connections.mjs";
 import { createSidebarStore } from "./sidebar.mjs";
 import { loadOperatorContext } from "./operator-context.mjs";
@@ -158,7 +159,8 @@ export async function startCommunity(options = {}) {
   db.prepare("DELETE FROM sessions WHERE expires_at<?").run(Date.now());
   const demo = env.COMMUNITY_DEMO === "1";
   const setupVault = createSetupVault(dataDir, env);
-  const integrations = options.integrations ?? createIntegrations({path:env.COMMUNITY_INTEGRATIONS_FILE});
+  const integrations = options.integrations ?? createIntegrations({path:env.COMMUNITY_INTEGRATIONS_FILE, getResources:()=>setupVault.resourceEnv()});
+  const mailbox = options.mailbox ?? createMailbox({env,fetchImpl:options.mailFetchImpl});
   let openClaw, pool, directLlm, llm, configured;
   function refreshModelConnections() {
     const effective = setupVault.runtimeEnv();
@@ -424,7 +426,7 @@ export async function startCommunity(options = {}) {
       hashJobs--;
     }
   }
-  async function readBody(req) {
+  async function readBody(req, maxBytes = MAX_BODY) {
     if (
       !(req.headers["content-type"] || "")
         .toLowerCase()
@@ -435,7 +437,7 @@ export async function startCommunity(options = {}) {
     const chunks = [];
     for await (const chunk of req) {
       length += chunk.length;
-      if (length > MAX_BODY) throw failure(413, "요청이 너무 큽니다.");
+      if (length > maxBytes) throw failure(413, "요청이 너무 큽니다.");
       chunks.push(chunk);
     }
     let result;
@@ -611,6 +613,8 @@ export async function startCommunity(options = {}) {
           "/setup-guide": ["../scripts/README.md", "text/plain"],
           "/setup.js": ["setup.js", "text/javascript"],
           "/setup.css": ["setup.css", "text/css"],
+          "/mail.js": ["mail.js", "text/javascript"],
+          "/mail.css": ["mail.css", "text/css"],
           "/icons/cloud-agent-v1.png": ["icons/cloud-agent-v1.png", "image/png"],
           "/icons/cloud-agent-v1-48.png": ["icons/cloud-agent-v1-48.png", "image/png"],
           "/icons/cloud-agent-v1-192.png": ["icons/cloud-agent-v1-192.png", "image/png"],
@@ -673,7 +677,7 @@ export async function startCommunity(options = {}) {
       else if(!/^\/api\/rooms\/[a-f0-9-]{36}\/workspace(?:\/|$)/.test(url.pathname))limit("api:" + user.id, 180);
       const isAttachmentPost = method === "POST" && /^\/api\/rooms\/[a-f0-9-]{36}\/attachments$/.test(url.pathname);
       const needsJsonBody = (method === "PUT" && url.pathname === "/api/sidebar") || (method === "POST" && !isAttachmentPost) || (method === "DELETE" && url.pathname === "/api/push/subscriptions");
-      const body = needsJsonBody ? await readBody(req) : {};
+      const body = needsJsonBody ? await readBody(req, url.pathname === "/api/admin/mail/send" ? 65536 : MAX_BODY) : {};
       if (authenticating) {
         const username = text(body.username, 40, true).toLowerCase();
         if (
@@ -796,6 +800,18 @@ export async function startCommunity(options = {}) {
         else throw failure(404,"찾을 수 없습니다.");
         refreshModelConnections();
         return reply(res,200,setupView());
+      }
+      if (url.pathname === "/api/admin/mail" || url.pathname.startsWith("/api/admin/mail/")) {
+        if (user.role !== "admin") throw failure(403,"관리자 전용입니다.");
+        limit("mail:"+user.id,60);
+        if (url.pathname === "/api/admin/mail" && method === "GET") return reply(res,200,await mailbox.list(url.searchParams.get("cursor") ?? undefined));
+        const mailMatch = url.pathname.match(/^\/api\/admin\/mail\/messages\/([a-f0-9]{64})$/);
+        if (mailMatch && method === "GET") return reply(res,200,await mailbox.read(mailMatch[1]));
+        if (url.pathname === "/api/admin/mail/send" && method === "POST") {
+          limit("mail-send:"+user.id,10);
+          return reply(res,200,await mailbox.send(body));
+        }
+        throw failure(404,"찾을 수 없습니다.");
       }
       if (url.pathname === "/api/admin/capabilities" && method === "GET") {
         if(user.role!=="admin") throw failure(403,"관리자 전용입니다.");

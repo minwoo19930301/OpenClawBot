@@ -101,3 +101,22 @@ node apps/community/scripts/connect-subscription.mjs codex --gateway local --che
 ```
 
 `OPENCLAW_CONFIG_PATH`와 `OPENCLAW_STATE_DIR`은 공식 Gateway가 쓰는 기존 위치를 가리켜야 합니다. 준비 상태 확인 후 `--check`를 빼고 로그인합니다. 이 helper가 다른 개인 Gateway의 구성·자격 증명을 옮겨주지는 않습니다.
+
+## 서버 키 보관함과 메일
+
+관리자의 **내 봇 설정 → 키 보관함**은 서버 Vault로 가져온 설정 항목의 이름과 등록 여부를 보여줍니다. 값은 응답이나 설정 레시피에 포함되지 않습니다. 지원하는 AI 공급자 키는 기존 연결을 보존하면서 자동 순환에 합쳐지고, 클라우드·Git 등 인프라 키는 보관만 합니다. 키를 저장한 것과 해당 서비스 실행 어댑터가 연결된 것은 다릅니다. Vault 파일과 암호화 키는 기존 데이터 볼륨에 함께 보관하며 Git에 넣지 않습니다.
+
+메일함은 관리자 사이드바의 **메일**에서 엽니다. 운영 메일 주소를 프로필에 기록하는 것만으로 메일함이 연결되지는 않습니다. 기존 메일 bridge가 있다면 서버의 비공개 환경 파일에 다음 두 변수를 설정하고 앱 컨테이너에 주입하세요. 기본값은 비어 있으며 설치자 본인의 주소·토큰을 사용합니다.
+
+```dotenv
+COMMUNITY_MAIL_URL=
+COMMUNITY_MAIL_TOKEN=
+```
+
+bridge는 Bearer 인증을 사용하고 다음 JSON API를 제공해야 합니다.
+
+- `GET`: `{address, messages:[{id,from,subject,receivedAt}], cursor}`; 다음 페이지는 `?cursor=`.
+- `GET ?id=<64자리 소문자 hex>`: `{id,from,to,subject,text,receivedAt,attachments:[{filename,mimeType}]}`.
+- `POST`: `{action:"send",to,subject,text,requestId}` 또는 `{action:"reply",id,text,requestId}`를 받아 `{accepted:true,id,from}` 반환.
+
+토큰은 서버 프록시에서만 사용합니다. 브라우저는 로그인·관리자 권한·CSRF 검증을 거쳐 접근하고, 메일 본문은 텍스트로 표시합니다. 첨부 파일은 이름만 표시하며 자동 회신은 하지 않습니다. 발송은 사용자가 ‘메일 보내기’를 누를 때만 요청하고, 같은 초안을 재시도할 때는 같은 요청 번호를 유지합니다. bridge도 이 요청 번호에 대한 중복 발송 방지를 구현해야 합니다.

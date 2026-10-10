@@ -174,7 +174,7 @@ export function createBotSetupUI({ api, getSession, onSaved, toast }) {
     providerInput.addEventListener("change", () => { baseUrl.value = catalog.find(item => item.id === providerInput.value)?.baseUrl || ""; });
     for (const item of providers) {
       const row = element("div", "setup-connection");
-      const copy = element("div"); copy.append(element("strong", "", item.name || item.provider), element("p", "setup-note", `${item.hasKey ? "키 등록됨" : "키 없음"} · ${item.source === "environment" ? "서버 환경 설정" : "서버 Vault"}${item.model ? ` · ${item.model}` : ""}`)); row.append(copy);
+      const copy = element("div"); copy.append(element("strong", "", item.name || item.provider), element("p", "setup-note", `${item.hasKey ? "키 등록됨" : "키 없음"} · ${item.source === "environment" ? "서버 환경 설정" : item.source === "imported" ? "가져온 키 모음" : "서버 Vault"}${item.model ? ` · ${item.model}` : ""}`)); row.append(copy);
       if (item.source === "vault") {
         const edit = button("변경", () => {
           editingId = item.id; editing.textContent = `${item.name || item.provider} 연결 변경`;
@@ -189,6 +189,27 @@ export function createBotSetupUI({ api, getSession, onSaved, toast }) {
       fields.disabled = true; fields.dataset.unavailable = "true";
       const submit = block.querySelector('button[type="submit"]'); submit.disabled = true; submit.dataset.unavailable = "true";
       block.append(element("p", "setup-note", "현재 서버에서 API 공급자 목록을 제공하지 않습니다."));
+    }
+    content.append(block);
+  }
+  function renderResources(data) {
+    const resources = Array.isArray(data.resources) ? data.resources : [];
+    const block = section("키 보관함", "가져온 키 모음을 서버 Vault에 암호화해 보관합니다. 키 값은 표시하지 않습니다. 위 AI API 목록의 연결만 AI 실행에 사용되며, 그 밖의 항목은 해당 서비스 연결이 필요합니다.");
+    block.append(element("p", "setup-connection-state", `${resources.filter(item => item.hasValue).length}개 값 보관 · ${resources.length}개 설정 항목`));
+    if (!resources.length) block.append(element("p", "setup-note", "아직 가져온 키 모음이 없습니다. 기존 서버 환경 설정과 AI 연결은 유지됩니다."));
+    const categories = { ai: "AI", mail: "메일", infrastructure: "서버·클라우드", service: "외부 서비스", other: "기타" };
+    for (const [category, title] of Object.entries(categories)) {
+      const items = resources.filter(item => item.category === category);
+      if (!items.length) continue;
+      const details = element("details", "setup-details");
+      details.append(element("summary", "", `${title} · ${items.length}개`));
+      const list = element("div", "setup-connections");
+      for (const item of items) {
+        const row = element("div", "setup-connection"), copy = element("div");
+        copy.append(element("strong", "", item.name), element("p", "setup-note", `${item.hasValue ? "보관됨" : "값 없음"} · ${item.source || "키 모음"}`));
+        row.append(copy); list.append(row);
+      }
+      details.append(list); block.append(details);
     }
     content.append(block);
   }
@@ -252,7 +273,7 @@ export function createBotSetupUI({ api, getSession, onSaved, toast }) {
   }
   function render(data) {
     content.replaceChildren();
-    renderProfile(data); renderProviders(data); renderGateway(data); renderBackend(data); renderSubscriptions(data); renderGuide();
+    renderProfile(data); renderProviders(data); renderResources(data); renderGateway(data); renderBackend(data); renderSubscriptions(data); renderGuide();
     const exportButton = button("설정 레시피 내보내기", () => void exportRecipe(), "text-button"); exportButton.dataset.setupAction = "";
     const exportRow = element("div", "setup-export"); exportRow.append(exportButton, element("p", "setup-note", "봇 이름·배포 기록·AI 연결 주소를 JSON으로 저장합니다. 키와 토큰은 포함되지 않습니다.")); content.append(exportRow);
   }

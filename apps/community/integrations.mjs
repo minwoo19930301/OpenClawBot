@@ -19,13 +19,19 @@ const DEFINITIONS = [
  ['telegram','Telegram',['TELEGRAM_BOT_TOKEN'],['profile']],
 ];
 const failure = (status,message) => Object.assign(new Error(message), {status});
-export function createIntegrations({path, fetchImpl=fetch, imapFactory=options=>new ImapFlow(options)}={}) {
+export function createIntegrations({path, getResources=()=>({}), fetchImpl=fetch, imapFactory=options=>new ImapFlow(options)}={}) {
  let refresh;
- async function credentials() {
+ async function savedCredentials() {
    if(!path) return {};
    try {return JSON.parse(await readFile(path,'utf8'));} catch(e) {if(e.code==='ENOENT')return {}; throw failure(503,'연결 설정을 읽을 수 없습니다.');}
  }
- function key(c,name) {return c[name] || Object.keys(c).filter(k=>k.startsWith(name+'_')).sort().map(k=>c[k]).find(Boolean);}
+ async function credentials() {
+   const saved = Object.fromEntries(Object.entries(await savedCredentials()).filter(([,value])=>value !== '' && value !== null && value !== undefined));
+   const c = {...getResources(),...saved};
+   for (const name of DEFINITIONS.flatMap(d=>d[2])) if(!c[name]) c[name]=key(c,name);
+   return c;
+ }
+ function key(c,name) {return c[name] || Object.keys(c).filter(k=>new RegExp('^'+name+'_\\d+$').test(k)).sort((a,b)=>Number(a.slice(name.length+1))-Number(b.slice(name.length+1))).map(k=>c[k]).find(Boolean);}
  async function json(url,token,options={}) {
    const r=await fetchImpl(url,{...options,redirect:'error',signal:AbortSignal.timeout(12000),headers:{authorization:'Bearer '+token,'content-type':'application/json',...options.headers}});
    if(!r.ok) {await r.body?.cancel(); throw Object.assign(failure(r.status===401||r.status===403?409:502,'연결 인증 또는 권한을 확인해 주세요. (HTTP '+r.status+')'),{upstreamStatus:r.status});}
@@ -41,10 +47,12 @@ export function createIntegrations({path, fetchImpl=fetch, imapFactory=options=>
    try {return await json('https://kapi.kakao.com/v2/api/calendar/calendars',c.KAKAO_ACCESS_TOKEN);}
    catch(e) {
      if(e.status!==409 || !c.KAKAO_REFRESH_TOKEN || !c.KAKAO_CLIENT_ID) throw e;
+     if(!path) throw failure(409,'카카오 토큰 갱신용 서버 저장소를 설정해 주세요.');
      refresh ??= (async()=>{
        const data=await json('https://kauth.kakao.com/oauth/token','',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'refresh_token',client_id:c.KAKAO_CLIENT_ID,refresh_token:c.KAKAO_REFRESH_TOKEN,...(c.KAKAO_CLIENT_SECRET?{client_secret:c.KAKAO_CLIENT_SECRET}:{})})}).catch(()=>{throw failure(409,'카카오 인증이 만료되었습니다. 카카오 로그인에서 talk_calendar 동의 후 다시 연결해 주세요.');});
        if(!data.access_token) throw failure(409,'카카오 재로그인이 필요합니다.');
-       const current=await credentials(); current.KAKAO_ACCESS_TOKEN=data.access_token;
+       // Only persist the integration file's own credentials; imported resources remain encrypted in the Vault.
+       const current=await savedCredentials(); current.KAKAO_ACCESS_TOKEN=data.access_token;
        if(data.refresh_token)current.KAKAO_REFRESH_TOKEN=data.refresh_token;
        await writeFile(path+'.tmp',JSON.stringify(current),{mode:0o600}); await rename(path+'.tmp',path);
        return data.access_token;

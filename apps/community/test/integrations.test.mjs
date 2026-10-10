@@ -37,7 +37,8 @@ test('commerce auth never returns its token and public model discovery is labele
 
 test('personal chat can use registered services while shared rooms and other users cannot',async()=>{
  const dir=await mkdtemp(join(tmpdir(),'personal-chat-'));let executions=0;const requests=[];
- const app=await startCommunity({dataDir:dir,port:0,env:{COMMUNITY_BOOTSTRAP_TOKEN:'bootstrap'},integrations:{
+ const contextPath=join(dir,'operator-context.txt');await writeFile(contextPath,'operator fixture only');
+ const app=await startCommunity({dataDir:dir,port:0,env:{COMMUNITY_BOOTSTRAP_TOKEN:'bootstrap',COMMUNITY_AGENT_CONTEXT_FILE:contextPath},integrations:{
   list:async()=>[{id:'naver-mail',name:'네이버 메일',configured:true,actions:['inbox']}],
   execute:async(id,action)=>{assert.equal(id,'naver-mail');assert.equal(action,'inbox');executions++;return {messages:[{subject:'private fixture'}]};}
  },llm:{name:'test',complete:async request=>{
@@ -74,8 +75,8 @@ test('personal chat can use registered services while shared rooms and other use
   }
   assert.equal(executions,1);
   assert.match(requests[0].system,/비밀번호나 인증 코드를 요구하지/);
-  assert.match(requests[0].system,/운영자 비즈니스 지식 베이스/);
-  assert.doesNotMatch(requests[1].system,/운영자 비즈니스 지식 베이스/);
+  assert.match(requests[0].system,/operator fixture only/);
+  assert.doesNotMatch(requests[1].system,/operator fixture only/);
   assert.equal(requests[1].toolDefinitions.some(t=>t.function.name==='read_connected_service'),false);
   assert.equal((await admin('/api/rooms')).data.rooms.filter(r=>r.personal).length,1);
  }finally{await app.close();await rm(dir,{recursive:true,force:true});}

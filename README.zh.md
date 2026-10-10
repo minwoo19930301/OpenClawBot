@@ -1,6 +1,8 @@
 # Open-Grokbot
 
-[English](README.md) | 简体中文
+[OpenClawBot 安装说明](README.md) | 简体中文
+
+本分支包含可自行部署的 OpenClawBot 社区应用。服务器、域名、Cloudflare、邮件与 AI 服务需要部署者提供自己的配置和凭据；请先阅读 [社区应用说明](apps/community/README.md) 和 [环境变量示例](apps/community/.env.example)。下文保留上游框架的架构、用法与许可证说明。
 
 开源的多 agent 通信与协调框架 —— 对现代桌面 agent 平台（Grok Bot 类）架构的**全量还原实现**。
 以逆向工程得到的架构为蓝图，完整重建其多 agent 系统的每一层：进程拓扑、端口协议、SSE 网关、排他调度、消息协议、群聊编排、跨用户房间、云 agent 桥、幂等账本与持久化状态。

@@ -2,7 +2,21 @@
 set -euo pipefail
 
 DESKTOP_IP="${DESKTOP_IP:-172.30.50.3}"
-HOST_PUBLIC_IP="${HOST_PUBLIC_IP:-168.107.91.96}"
+HOST_PUBLIC_IP="${HOST_PUBLIC_IP:?Set HOST_PUBLIC_IP to this server IPv4 address}"
+validate_ipv4() {
+  local ip="$1" octet
+  [[ "$ip" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || return 1
+  local IFS=.
+  local -a octets
+  read -r -a octets <<< "$ip"
+  for octet in "${octets[@]}"; do
+    (( 10#$octet <= 255 )) || return 1
+  done
+}
+validate_ipv4 "$HOST_PUBLIC_IP" && validate_ipv4 "$DESKTOP_IP" || {
+  echo 'HOST_PUBLIC_IP and DESKTOP_IP must be valid IPv4 addresses' >&2
+  exit 1
+}
 command -v nft >/dev/null
 
 if nft list table inet community_desktop_guard >/dev/null 2>&1; then

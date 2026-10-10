@@ -2,7 +2,7 @@
 
 이 앱은 [Open-Grokbot upstream](https://github.com/LING71671/open-grokbot)의 GPL-3.0-only clean-room 프레임워크를 바탕으로 별도 구현한 사용자 커뮤니티 표면입니다. upstream의 구조·런타임·프로토콜 문서는 저장소에 유지하며, 이 앱에서 추가한 계정 인증, 방별 ACL, 첨부파일, Docker/OCI 배포, 브라우저 데스크톱 프록시와 OpenClaw adapter의 범위를 설명합니다. 원본 제품과의 제휴를 주장하지 않으며 원본 소스·자산·비공개 자격 증명을 포함하지 않습니다.
 
-라이브 링크: [https://168.107.91.96](https://168.107.91.96) · 초대 계정 필요
+자체 호스팅 앱입니다. 접속 주소와 최초 관리자 초대는 설치하는 운영자가 설정합니다. [설정 예시](.env.example)의 서버·AI·푸시 항목과 외부 서비스 인증 정보는 자신의 환경에 맞게 등록하세요.
 
 초대 기반 계정과 방별 권한을 제공하는 공동 대화 웹앱입니다. SQLite에 계정·세션·방·메시지·첨부 메타데이터를 저장하고, 사람 메시지와 선택한 봇의 응답을 같은 방에 표시합니다. UI는 공개적으로 재구성된 Grok Bot 0.18 화면의 어두운 구조와 색상을 참고하며, 차이와 근거는 [DESIGN-REFERENCE.md](DESIGN-REFERENCE.md)에 기록합니다.
 
@@ -17,7 +17,7 @@
 - 설정된 방에서만 브라우저 도구를 사용할 수 있는 모델 도구 루프
 - 선택적 PWA 설치와 Web Push 알림. VAPID 키를 서버에 설정한 경우에만 활성화
 
-첨부 파일은 멤버 인증 뒤에만 제공되며, 업로더가 메시지에 게시하기 전에는 업로더만 읽을 수 있습니다. 이미지 인식과 음성 전사는 구현하지 않았습니다. 모델은 첨부 내용을 보거나 듣지 않으며, 그렇게 주장해서도 안 됩니다.
+첨부 파일은 멤버 인증 뒤에만 제공되며, 업로더가 메시지에 게시하기 전에는 업로더만 읽을 수 있습니다. 이미지·음성 처리 범위는 선택한 모델과 설정된 미디어 백엔드에 따라 달라집니다.
 
 ## 로컬 실행
 
@@ -31,6 +31,8 @@ npm start -w @open-grokbot/community
 
 환경 변수 예시는 `.env.example`에 있습니다. 파일을 자동으로 읽지 않으므로 실행 환경이나 서비스 관리자로 값을 전달하세요. 첫 가입에는 `COMMUNITY_BOOTSTRAP_TOKEN`이 필요하고, 이후에는 관리자 가입 초대를 사용합니다. OpenClaw 연결에는 `COMMUNITY_OPENCLAW_BASE_URL`과 `COMMUNITY_OPENCLAW_TOKEN`을 사용합니다. 직접 모델을 연결하려면 `COMMUNITY_LLM_BASE_URL`, `COMMUNITY_LLM_MODEL`, `COMMUNITY_LLM_API_KEY`가 모두 필요합니다. 두 연결 방식이 모두 설정되면 OpenClaw를 우선합니다. 모델 환경 변수와 provider/API key는 저장소에 넣지 않습니다. 두 백엔드 모두 비활성화하면 모델 호출 없이 사람 간 대화만 사용할 수 있습니다.
 
+메일·캘린더 등 외부 연결은 [빈 Vault 예시](integrations.example.json)를 자신의 비공개 경로에 복사한 뒤 `COMMUNITY_INTEGRATIONS_FILE`로 지정합니다. 선택적 개인 맥락 파일은 `COMMUNITY_AGENT_CONTEXT_FILE`로 지정하며 기본값은 비어 있습니다. 경로와 키를 공개 소스에 넣지 않고, 기존 설치에서는 원본 Vault와 데이터 볼륨을 보존하세요. 자세한 연결 범위는 [연결 서비스 안내](docs/integrations.md)에 있습니다.
+
 `COMMUNITY_DEMO=1`은 외부 모델을 호출하지 않는 기능 확인용 모드입니다. 사람끼리의 대화는 모델 연결 없이도 사용할 수 있고, 봇 요청은 연결 필요 오류를 표시합니다.
 
 ## 사이드바와 작업 공간
@@ -39,19 +41,19 @@ npm start -w @open-grokbot/community
 
 작업 공간은 브라우저·터미널·파일 탭으로 나뉩니다. 브라우저는 CDP를 통해 페이지 영역만 표시하고 조작합니다. 터미널은 xterm에서 같은 OCI 컨테이너의 비루트 PTY에 직접 연결하며 계정·대화별 셸 상태를 유지합니다. 파일 탭은 공유 홈의 목록과 8 MiB 이하 파일 미리보기·다운로드를 제공합니다. 모두 현재 대화 멤버 인증을 거치며 터미널은 일회용 세션 티켓과 same-origin WebSocket을 사용합니다.
 
-현재 OCI 배포는 `COMMUNITY_SHARED_DESKTOP_ROOM`으로 하나의 컴퓨터와 파일 공간을 모든 대화에 연결합니다. 공유 브라우저 조작은 하나의 대기열로 순서를 보장하고, 중복 화면 요청은 합칩니다. 컨테이너 내부 `6083` 브리지는 앱에서만 접근하며 호스트 공개 포트로 노출하지 않습니다. 상세 구성은 [desktop/README.md](deploy/desktop/README.md)를 참조하세요.
+공유 작업 공간을 사용하려면 `COMMUNITY_SHARED_DESKTOP_ROOM`에 자신의 기준 방 ID를 설정해 하나의 컴퓨터와 파일 공간을 모든 대화에 연결합니다. 공유 브라우저 조작은 하나의 대기열로 순서를 보장하고, 중복 화면 요청은 합칩니다. 컨테이너 내부 `6083` 브리지는 앱에서만 접근하며 호스트 공개 포트로 노출하지 않습니다. 상세 구성은 [desktop/README.md](deploy/desktop/README.md)를 참조하세요.
 
 ## 기존 데스크톱과 브라우저 도구
 
 `COMMUNITY_DESKTOP_MAP`은 방 UUID마다 전용 OCI 데스크톱 WebSocket 및 CDP endpoint를 매핑합니다. endpoint는 서버가 허용한 loopback 또는 전용 desktop 컨테이너 주소여야 하며, 한 endpoint를 여러 방이 공유할 수 없습니다. 클라이언트는 먼저 `GET /api/rooms/:id/desktop`으로 상태를 조회하고, 사용자가 연결을 요청할 때 `POST .../desktop/ticket`으로 짧은 수명의 티켓을 받은 뒤 same-origin WebSocket으로 연결합니다.
 
-설정된 방의 봇 실행에는 모델 호출과 브라우저 도구 호출이 포함될 수 있습니다. 한 턴은 최대 4개 브라우저 action과 최대 5회의 모델 호출로 제한되며, 추가 모델 호출 전에 서버 quota callback을 통과해야 합니다. 설정되지 않은 방은 브라우저 도구를 사용하지 않습니다. OpenClaw 2.0 계열 gateway는 `COMMUNITY_OPENCLAW_BASE_URL`, `COMMUNITY_OPENCLAW_TOKEN`, 선택적 agent id를 서버 환경 변수로 명시했을 때 adapter를 통해 연결됩니다. 라이브 배포에서는 별도 `2026.9.5` Gateway와 실제 모델을 연결하고, 공동 브라우저에서 Example Domain을 열어 읽은 뒤 한국어 답변을 반환하는 경로를 검증했습니다.
+설정된 방의 봇 실행에는 모델 호출과 브라우저 도구 호출이 포함될 수 있습니다. 한 턴은 최대 4개 브라우저 action과 최대 5회의 모델 호출로 제한되며, 추가 모델 호출 전에 서버 quota callback을 통과해야 합니다. 설정되지 않은 방은 브라우저 도구를 사용하지 않습니다. OpenClaw 2.0 계열 gateway는 `COMMUNITY_OPENCLAW_BASE_URL`, `COMMUNITY_OPENCLAW_TOKEN`, 선택적 agent id를 서버 환경 변수로 명시했을 때 adapter를 통해 연결됩니다. Gateway 버전과 모델·브라우저 연결은 자신의 배포 환경에서 검증하세요.
 
 공유 데스크톱 설정이 없는 독립 배포에서는 운영자가 방별 컨테이너를 provision하고 서버 측 map에 등록해야 합니다.
 
 ## 배포
 
-Docker/OCI 예시는 [deploy/README.md](deploy/README.md)에 있습니다. 공개 데모의 주소와 배포 구성은 재현을 위해 문서에 포함하며, 비밀 키·초대 토큰·개인 데이터는 서버에서만 관리합니다. 다른 서버에 배포할 때는 Caddy 주소, 방 UUID, 네트워크와 데스크톱 map을 함께 조정하세요.
+Docker/OCI 예시는 [deploy/README.md](deploy/README.md)에 있습니다. 운영할 서버의 Caddy 주소, 방 UUID, 네트워크와 작업 공간 map을 설정하세요. Cloudflare를 DNS나 프록시에 사용할 경우 자신의 계정·영역·토큰을 연결합니다. 메일·캘린더 등 외부 서비스는 자신의 계정과 필요한 동의를 등록합니다. 비밀 키·초대 토큰·Vault·개인 데이터는 서버나 Git에서 제외한 비공개 저장소에서 관리합니다. Fork의 자동 배포는 자신의 대상과 자격 증명을 준비한 뒤 활성화하세요.
 
 ## PWA와 Web Push
 

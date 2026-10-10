@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   setup:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && vars.OCI_DEPLOY_REPOSITORY == github.repository && vars.OCI_DEPLOY_HOST != ''
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -21,22 +21,33 @@ jobs:
       - name: Connect using the temporary bootstrap credential
         env:
           SSH_KEY: ${{ secrets.OCI_BOOTSTRAP_SSH_KEY }}
-          KNOWN_HOSTS: ${{ vars.OCI_KNOWN_HOSTS }}
+          OCI_KNOWN_HOSTS: ${{ vars.OCI_KNOWN_HOSTS }}
+          OCI_DEPLOY_REPOSITORY: ${{ vars.OCI_DEPLOY_REPOSITORY }}
+          OCI_DEPLOY_HOST: ${{ vars.OCI_DEPLOY_HOST }}
+          OCI_DEPLOY_USER: ${{ vars.OCI_DEPLOY_USER }}
+          OCI_PUBLIC_ORIGIN: ${{ vars.OCI_PUBLIC_ORIGIN }}
           OPERATION: ${{ inputs.operation }}
           DEPLOY_PUBLIC_KEY: ${{ vars.OCI_DEPLOY_PUBLIC_KEY }}
         shell: bash
         run: |
           set -euo pipefail
+          python3 scripts/deploy/workflow_config.py
+          test -n "$SSH_KEY"
+          target="$OCI_DEPLOY_USER@$OCI_DEPLOY_HOST"
           umask 077
           key="$RUNNER_TEMP/oci-bootstrap-key"
           hosts="$RUNNER_TEMP/oci-known-hosts"
           trap 'rm -f "$key" "$hosts"' EXIT
           printf '%s\n' "$SSH_KEY" > "$key"
-          printf '%s\n' "$KNOWN_HOSTS" > "$hosts"
+          printf '%s\n' "$OCI_KNOWN_HOSTS" > "$hosts"
           args=(-i "$key" -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$hosts" -o ConnectTimeout=20)
           if [ "$OPERATION" = inspect ]; then
-            ssh "${args[@]}" opc@168.107.91.96 'sudo -n python3 -' < scripts/deploy/inspect.py
+            ssh "${args[@]}" "$target" 'sudo -n python3 -' < scripts/deploy/inspect.py
+          elif [ "$OPERATION" = install ]; then
+            test -n "$DEPLOY_PUBLIC_KEY"
+            ssh "${args[@]}" "$target" 'mkdir -p .openclaw-bootstrap && chmod 700 .openclaw-bootstrap'
+            scp "${args[@]}" scripts/deploy/release.py scripts/deploy/install.sh "$target:.openclaw-bootstrap/"
+            printf '%s\n' "$DEPLOY_PUBLIC_KEY" | ssh "${args[@]}" "$target" 'sudo -n bash .openclaw-bootstrap/install.sh'
           else
-            scp "${args[@]}" scripts/deploy/release.py scripts/deploy/install.sh opc@168.107.91.96:/home/opc/
-            printf '%s\n' "$DEPLOY_PUBLIC_KEY" | ssh "${args[@]}" opc@168.107.91.96 'sudo -n bash /home/opc/install.sh'
+            exit 2
           fi

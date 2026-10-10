@@ -3,14 +3,23 @@
     "mode": "local",
     "bind": "lan",
     "port": 18890,
-    "auth": { "mode": "token", "token": "${COMMUNITY_OPENCLAW_TOKEN}" },
-    "controlUi": { "enabled": false },
+    "auth": {
+      "mode": "token",
+      "token": "${COMMUNITY_OPENCLAW_TOKEN}"
+    },
+    "controlUi": {
+      "enabled": false
+    },
     "http": {
       "endpoints": {
         "responses": {
           "enabled": true,
-          "files": { "allowUrl": false },
-          "images": { "allowUrl": false }
+          "files": {
+            "allowUrl": false
+          },
+          "images": {
+            "allowUrl": false
+          }
         }
       }
     }
@@ -18,34 +27,53 @@
   "agents": {
     "defaults": {
       "workspace": "/home/node/.openclaw/workspace",
-      "model": { "primary": "communityGroq/openai/gpt-oss-120b" },
+      "model": {
+        "primary": "configured/${OPENCLAW_MODEL_ID}"
+      },
       "maxConcurrent": 1,
-      "heartbeat": { "every": "0m" },
+      "heartbeat": {
+        "every": "0m"
+      },
       "skipBootstrap": true
     },
-    "entries": { "community": {} }
+    "entries": {
+      "community": {}
+    }
   },
   "models": {
     "mode": "replace",
     "providers": {
-      "communityGroq": {
-        "baseUrl": "https://api.groq.com/openai/v1",
-        "apiKey": "${GROQ_API_KEY}",
-        "api": "openai-completions",
-        "models": [{
-          "id": "openai/gpt-oss-120b",
-          "name": "GPT OSS 120B",
-          "reasoning": true,
-          "input": ["text"],
-          "contextWindow": 131072,
-          "maxTokens": 1024
-        }]
+      "configured": {
+        "baseUrl": "${OPENCLAW_MODEL_BASE_URL}",
+        "apiKey": "${OPENCLAW_MODEL_API_KEY}",
+        "api": "${OPENCLAW_MODEL_API}",
+        "models": [
+          {
+            "id": "${OPENCLAW_MODEL_ID}",
+            "name": "${OPENCLAW_MODEL_NAME}",
+            "input": [
+              "text"
+            ]
+          }
+        ]
       }
     }
   },
-  "tools": { "deny": ["*"] },
-  "plugins": { "enabled": false },
-  "browser": { "enabled": false },
-  "cron": { "enabled": false },
-  "hooks": { "enabled": false }
+  "tools": {
+    "deny": [
+      "*"
+    ]
+  },
+  "plugins": {
+    "enabled": false
+  },
+  "browser": {
+    "enabled": false
+  },
+  "cron": {
+    "enabled": false
+  },
+  "hooks": {
+    "enabled": false
+  }
 }

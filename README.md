@@ -1,72 +1,55 @@
 # OpenClawBot
 
-<!-- PROJECT-PRESENTATION:START -->
-<a href="https://168.107.91.96"><img src="docs/images/openclawbot-chat.png" alt="OpenClawBot" width="960"></a>
+<img src="apps/community/public/icons/app-logo-v3-192.png" alt="OpenClawBot" width="88">
 
-[![OPEN APP](https://img.shields.io/badge/OPEN%20APP-2C6049?style=for-the-badge)](https://168.107.91.96) [![QUICK START](https://img.shields.io/badge/QUICK%20START-374151?style=for-the-badge)](#로컬-실행) [![SOURCE](https://img.shields.io/badge/SOURCE-444444?style=for-the-badge)](https://github.com/minwoo19930301/OpenClawBot)
-<!-- PROJECT-PRESENTATION:END -->
+직접 호스팅하는 초대 기반 AI 작업 공간입니다. 대화와 모델 선택, 공유 브라우저, 터미널, 파일 탐색기를 한 화면에서 사용합니다.
 
-<p align="center">
-  <strong>함께 대화하고, 같은 Chrome을 조작하는 OpenClaw 커뮤니티</strong>
-</p>
-<p align="center">
-  <a href="https://168.107.91.96/"><img src="https://img.shields.io/badge/OpenClawBot-서비스_열기-2563eb?style=for-the-badge&amp;logo=googlechrome&amp;logoColor=white" alt="OpenClawBot 서비스 열기" /></a>
-  <a href="https://github.com/minwoo19930301/OpenClawBot/actions/workflows/ci.yml"><img src="https://github.com/minwoo19930301/OpenClawBot/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-</p>
-<p align="center">
-  <a href="https://168.107.91.96/"><strong>↗ OpenClawBot 접속</strong></a> ·
-  <a href="apps/community/README.md">사용 안내</a> ·
-  <a href="docs/portfolio-ko.md">프로젝트 소개</a> ·
-  <a href=".agents/skills/oci-openclaw-ops/SKILL.md">OCI 운영 스킬</a>
-</p>
+[로컬 실행](#로컬-실행) · [환경 설정](apps/community/README.md) · [배포 안내](apps/community/deploy/README.md) · [CI 구성](.github/workflows/ci.yml)
 
-> **접속 주소:** https://168.107.91.96/ · 초대 기반 서비스입니다. 기존 회원은 아이디와 비밀번호로 로그인합니다. 가입 코드와 API 키는 공개하지 않습니다.
->
-> **홈 화면 앱(PWA):** 현재 HTTPS IP 주소를 그대로 사용합니다. 홈 화면에 추가한 뒤 로그인하고 **알림 켜기 → 테스트 알림 보내기**로 기기 수신을 확인하세요. 실제 설치·알림 지원은 브라우저와 기기 설정에 따라 다릅니다.
+## Fork 후 준비
 
-## 실제 화면
+서버, 도메인, AI 공급자, 외부 서비스 계정은 설치하는 운영자가 선택하고 등록합니다. [환경 변수 예시](apps/community/.env.example)의 빈 항목을 필요한 기능에 맞게 채우세요.
 
-현재 운영 중인 서비스에서 직접 캡처한 화면입니다.
+| 항목 | 준비할 설정 |
+| --- | --- |
+| 계정과 데이터 | 새 데이터 디렉터리, 최초 관리자용 `COMMUNITY_BOOTSTRAP_TOKEN` |
+| 서버와 HTTPS | 운영할 서버, 자신의 공개 주소, 인증서와 프록시 설정 |
+| AI | 사용할 공급자의 API 키·모델 또는 전용 OpenClaw Gateway 주소·토큰 |
+| 브라우저·터미널·파일 | 작업 공간 컨테이너와 서버 측 연결 설정 |
+| Cloudflare | DNS나 프록시에 사용할 경우 자신의 계정·영역·권한 범위가 지정된 토큰 |
+| 메일·캘린더 등 | 연결할 서비스 계정의 인증 정보와 필요한 동의 |
+| PWA 알림 | 자신의 VAPID 키 쌍과 발신자 정보 |
+| 자동 배포 | 자신의 저장소, 서버 대상, 배포 자격 증명과 준비 상태 설정 |
 
-### 공동 대화
-
-![OpenClawBot 공동 대화와 AI 응답 화면](docs/images/openclawbot-chat.png)
-
-초대된 참여자가 같은 방에서 대화하고, 선택한 봇의 답변을 함께 확인합니다. 캡처에는 이전 연결 점검 중의 오류 메시지도 대화 기록으로 남아 있습니다.
-
-### Linux 데스크톱 · Google Chrome
-
-![OpenClawBot에서 확대한 OCI Linux Google Chrome 원격 화면](docs/images/openclawbot-desktop.png)
-
-대화방의 OCI 데스크톱을 확대해 직접 조작합니다. 위 화면은 실제 Linux 컨테이너에서 실행 중인 Google Chrome으로 Example Domain을 연 모습입니다.
+AI, 외부 서비스, 푸시 알림은 해당 기능을 설정한 뒤 사용할 수 있습니다. 서버의 환경 파일과 Vault 데이터는 운영자가 별도로 관리하며 Git에 추가하지 않습니다. 자동 배포 설정은 [배포 자동화 안내](scripts/deploy/README.md)를 참고하세요.
 
 ## 할 수 있는 일
 
 | 기능 | 설명 |
 | --- | --- |
-| 공동 대화와 AI 답변 | 초대 기반 계정, 방별 참여 권한, OpenClaw Gateway를 통한 모델 응답 |
-| 공동 브라우저 | 같은 방의 참여자가 Linux의 Google Chrome을 보고 조작 |
-| AI 브라우저 도구 | 연결된 방에서 페이지 이동·내용 확인 등의 브라우저 작업 |
-| 사진·음성 | 파일 첨부, 브라우저 음성 녹음과 재생 |
-| 홈 화면 앱 | HTTPS IP 주소에서 PWA 설치와 Web Push 알림 |
-| 관리자 모니터링 | 서버 강제 자원 제한, 실측 상태 설명, 상태 변화 알림 · AI 호출 없음 |
-| OCI 운영 | Docker Compose 배포, 별도 AI Gateway, 재사용 가능한 운영 스킬 |
-
-사진·음성의 **첨부와 재생**을 지원하며, 이미지 인식과 음성 전사는 아직 구현하지 않았습니다. 방별 데스크톱은 운영자가 별도로 연결해야 합니다. 휴대폰의 실제 PWA 설치와 OS 알림 수신은 기기에서 추가 확인이 필요합니다.
+| 대화 | 초대 계정, 방별 참여 권한, 첫 메시지 기반 제목, Fork와 Compact |
+| 대화 정리 | 고정·보관·그룹, 크기 조절 가능한 사이드바, 분할 보기 |
+| AI 연결 | OpenClaw 또는 직접 연결한 공급자, 모델 선택과 연결 상태에 따른 순환 |
+| 작업 공간 | Chrome 페이지 조작, xterm 터미널, 파일 목록·미리보기·다운로드 |
+| 미디어 | 사진·음성 첨부와 브라우저 녹음; 처리 범위는 설정된 모델과 백엔드에 따라 결정 |
+| 사용량 | 대화 맥락 추정치, 수집된 API 사용량과 공급자 한도 |
+| 모니터링 | 연결된 호스트의 CPU·메모리·디스크 상태 |
+| 홈 화면 앱 | HTTPS 환경에서 PWA 설치와 선택적 Web Push 알림 |
 
 ## 구성
 
 ```mermaid
 flowchart LR
-    User[초대된 사용자] --> HTTPS[Caddy HTTPS]
+    User[초대된 사용자] --> HTTPS[HTTPS 프록시]
     HTTPS --> App[OpenClawBot · 인증 · 방 권한]
     App --> DB[(SQLite · 첨부)]
-    App --> Gateway[별도 OpenClaw Gateway]
-    Gateway --> Model[모델 공급자]
-    App --> Desktop[방 전용 Linux · Google Chrome]
+    App --> Gateway[선택적 OpenClaw Gateway]
+    Gateway --> Model[운영자가 연결한 모델 공급자]
+    App --> Model
+    App --> Workspace[작업 공간 · Chrome · 터미널 · 파일]
 ```
 
-OCI Ampere A1에서 Docker로 웹앱, OpenClaw Gateway, 원격 데스크톱, HTTPS 프록시를 분리해 운영합니다. 라이브 앱은 OpenClaw `2026.9.5` Gateway에 연결되어 있으며, 실제 모델 응답과 브라우저 페이지 이동을 검증했습니다. 모델 API 키와 가입 코드는 공개 저장소에 포함하지 않습니다.
+Docker Compose와 OCI 예시를 제공하며, 실제 주소·호스트·자원·모델 연결은 배포 환경에서 지정합니다. 공유 작업 공간을 선택하면 대화마다 같은 컴퓨터를 다른 화면으로 볼 수 있습니다.
 
 ## 로컬 실행
 
@@ -78,17 +61,18 @@ npm run build -w @open-grokbot/runner -w @open-grokbot/llm -w @open-grokbot/comm
 npm start -w @open-grokbot/community
 ```
 
-환경 변수는 [설정 예시](apps/community/.env.example)를 참고해 실행 환경에 전달합니다. 최초 관리자 가입에는 `COMMUNITY_BOOTSTRAP_TOKEN`이 필요하고, 이후에는 관리자 메뉴에서 사용자 초대를 발급합니다. AI 연결과 배포 설정은 아래 문서를 참고하세요. 내부 workspace 이름은 기존 패키지 호환성을 위해 유지합니다.
+실행 전 [설정 예시](apps/community/.env.example)를 참고해 환경 변수를 전달합니다. 최초 관리자 가입에는 운영자가 새로 만든 비공개 `COMMUNITY_BOOTSTRAP_TOKEN`이 필요합니다. 이후에는 관리자 메뉴에서 사용자 초대를 발급합니다. 내부 workspace 이름은 기존 패키지 호환성을 위해 유지합니다.
 
 ## 문서와 검증
 
 - [사용 안내 · 환경 설정](apps/community/README.md)
 - [Docker · OCI 배포](apps/community/deploy/README.md)
-- [Linux · Chrome 데스크톱](apps/community/deploy/desktop/README.md)
+- [Linux · Chrome 작업 공간](apps/community/deploy/desktop/README.md)
+- [배포 자동화](scripts/deploy/README.md)
 - [OCI 운영 스킬](.agents/skills/oci-openclaw-ops/SKILL.md)
-- [포트폴리오 소개](docs/portfolio-ko.md)
+- [프로젝트 소개](docs/portfolio-ko.md)
 - [보안 정책](SECURITY.md)
-- [GitHub CI](https://github.com/minwoo19930301/OpenClawBot/actions/workflows/ci.yml)
+- [CI 구성](.github/workflows/ci.yml)
 
 ```sh
 npm run build
@@ -96,8 +80,10 @@ npm test
 npm run typecheck
 ```
 
-CI는 Node.js 24에서 빌드·테스트·타입 검사를 실행합니다. 앱 테스트는 인증, 방 권한, 초대, 첨부, 데스크톱 프록시, 모델 도구 루프와 PWA/Web Push 계약을 확인합니다.
+CI는 빌드·테스트·타입 검사를 실행합니다. 실제 모델 응답, 서버 자원, PWA 설치와 기기 알림 수신은 각 배포 환경에서 확인하세요.
+
+현재 문서는 특정 운영 서버의 주소·계정·화면을 기본 설정으로 사용하지 않습니다. **이전 Git 이력에는 과거 배포 메타데이터가 남아 있을 수 있으며, 현재 파일 정리가 과거 이력까지 삭제한 것은 아닙니다.**
 
 ## 라이선스 · 출처
 
-[GNU GPL v3 only](LICENSE) (`GPL-3.0-only`). 공개 [LING71671/open-grokbot](https://github.com/LING71671/open-grokbot) 프레임워크를 바탕으로 OpenClawBot의 공동 대화, 계정·초대, 미디어 첨부, OCI 데스크톱, OpenClaw 연동과 PWA 기능을 추가했습니다. 원본의 저작권·라이선스 고지는 유지합니다. 원본 상용 제품과 제휴하지 않으며, 해당 제품의 유출 소스·자산·비공개 자격 증명은 포함하지 않습니다.
+[GNU GPL v3 only](LICENSE) (`GPL-3.0-only`). 공개 [LING71671/open-grokbot](https://github.com/LING71671/open-grokbot) 프레임워크를 바탕으로 OpenClawBot의 공동 대화, 계정·초대, 미디어 첨부, 작업 공간, OpenClaw 연동과 PWA 기능을 추가했습니다. 원본의 저작권·라이선스 고지는 유지합니다. 원본 상용 제품과 제휴하지 않으며, 해당 제품의 유출 소스·자산·비공개 자격 증명은 포함하지 않습니다.

@@ -17,11 +17,16 @@ services:
     init: true
     env_file:
       - .env.production
-      - .env.openclaw
+      - path: .env.openclaw
+        required: false
       - path: .env.providers
         required: false
     environment:
-      COMMUNITY_PROVISIONER_SOCKET: /run/community-provisioner/control.sock
+      COMMUNITY_ORIGIN: ${COMMUNITY_ORIGIN:?Set the public HTTPS origin}
+      COMMUNITY_SHARED_DESKTOP_ROOM: ${COMMUNITY_SHARED_DESKTOP_ROOM:?Set a new workspace UUID}
+      COMMUNITY_DESKTOP_VIEWS: '1'
+      COMMUNITY_DESKTOP_MAP: '{"${COMMUNITY_SHARED_DESKTOP_ROOM:?Set a new workspace UUID}":{"wsUrl":"ws://desktop-${COMMUNITY_SHARED_DESKTOP_ROOM:?Set a new workspace UUID}:6080/","cdpUrl":"http://desktop-${COMMUNITY_SHARED_DESKTOP_ROOM:?Set a new workspace UUID}:9222/"}}'
+      COMMUNITY_PROVISIONER_SOCKET: ${COMMUNITY_PROVISIONER_SOCKET:-}
       COMMUNITY_MONITOR_PATH: /run/community-monitor/status.json
     ports:
       - '127.0.0.1:8787:8787'
@@ -34,7 +39,7 @@ services:
       - /tmp:size=64m,mode=1777
     pids_limit: 128
     cap_drop: [ALL]
-    security_opt: [no-new-privileges:true]
+    security_opt: ['no-new-privileges:true']
     logging: *logging
     networks:
       desktop:
@@ -50,11 +55,13 @@ services:
     cgroup_parent: community.slice
     restart: unless-stopped
     init: true
-    env_file: .env.openclaw
+    env_file:
+      - path: .env.openclaw
+        required: false
     environment:
       OPENCLAW_CONFIG_PATH: /etc/openclaw/community.json
       OPENCLAW_STATE_DIR: /home/node/.openclaw
-      NODE_OPTIONS: --max-old-space-size=16384
+      NODE_OPTIONS: ${COMMUNITY_OPENCLAW_NODE_OPTIONS:-}
     volumes:
       - ./openclaw/community.json:/etc/openclaw/community.json:ro,Z
       - community-openclaw:/home/node/.openclaw
@@ -64,7 +71,7 @@ services:
       - /home/node/.cache:size=128m,uid=1000,gid=1000,mode=700
     pids_limit: 192
     cap_drop: [ALL]
-    security_opt: [no-new-privileges:true]
+    security_opt: ['no-new-privileges:true']
     logging: *logging
     networks:
       ai:
@@ -75,7 +82,7 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-  desktop-4bc4b8f0-1789-4afb-a927-e7adbcc7b9b9:
+  desktop:
     build: ./desktop
     image: community-desktop:local
     cgroup_parent: community.slice
@@ -85,7 +92,7 @@ services:
       - '127.0.0.1:6080:6080'
       - '127.0.0.1:9222:9222'
     volumes:
-      - /var/lib/community-shared/home:/home/desktop:Z
+      - ${COMMUNITY_DESKTOP_HOME:?Set an absolute desktop storage directory}:/home/desktop:Z
     tmpfs:
       - /tmp:size=128m,mode=1777
       - /run/desktop:size=32m,uid=10001,gid=10001,mode=700
@@ -99,15 +106,19 @@ services:
     networks:
       desktop:
         ipv4_address: 172.30.50.3
+        aliases:
+          - desktop-${COMMUNITY_SHARED_DESKTOP_ROOM:?Set a new workspace UUID}
   caddy:
     image: caddy:2.11.4-alpine
     cgroup_parent: community.slice
     restart: unless-stopped
+    environment:
+      COMMUNITY_PUBLIC_HOST: ${COMMUNITY_PUBLIC_HOST:?Set the public domain or IP}
     ports:
       - '80:80'
       - '443:443'
     volumes:
-      - ./Caddyfile.ip:/etc/caddy/Caddyfile:ro,Z
+      - ${COMMUNITY_CADDY_FILE:-./Caddyfile.domain}:/etc/caddy/Caddyfile:ro,Z
       - caddy-data:/data
       - caddy-config:/config
     read_only: true
@@ -116,7 +127,7 @@ services:
     pids_limit: 64
     cap_drop: [ALL]
     cap_add: [NET_BIND_SERVICE]
-    security_opt: [no-new-privileges:true]
+    security_opt: ['no-new-privileges:true']
     logging: *logging
     networks:
       web:

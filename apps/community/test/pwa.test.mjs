@@ -40,7 +40,7 @@ test("push safely handles missing/malformed data and confines notification desti
 });
 
 test("notification click opens the room, stripping arbitrary paths and query parameters", async () => {
-  const room = "4bc4b8f0-1789-4afb-a927-e7adbcc7b9b9";
+  const room = "11111111-1111-4111-8111-111111111111";
   const w = worker();
   await dispatch(w.events.get("notificationclick"), { notification: { close() {}, data: { url: `/?room=${room}&redirect=https://evil.example` } } });
   assert.deepEqual(w.opened, [`https://example.com/?room=${room}`]);

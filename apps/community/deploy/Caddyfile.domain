@@ -1,11 +1,11 @@
 {
     admin off
-    default_sni 168.107.91.96
+    default_sni {$COMMUNITY_PUBLIC_HOST}
     servers {
         protocols h1 h2
     }
 }
-https://bot.ai-ing.org {
+https://{$COMMUNITY_PUBLIC_HOST} {
     encode zstd gzip
     request_body {
         max_size 13MB
@@ -15,13 +15,4 @@ https://bot.ai-ing.org {
         X-Content-Type-Options nosniff
         Referrer-Policy no-referrer
     }
-}
-https://168.107.91.96 {
-    tls {
-        issuer acme {
-            dir https://acme-v02.api.letsencrypt.org/directory
-            profile shortlived
-        }
-    }
-    redir https://bot.ai-ing.org{uri} 308
 }

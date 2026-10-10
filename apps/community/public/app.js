@@ -573,7 +573,7 @@ function renderHostDashboard(snapshot) {
   const panel = document.createElement("section");
   panel.className = "host-dashboard";
   const element = (tag, text, className) => { const node=document.createElement(tag); node.textContent=text; if(className)node.className=className; return node; };
-  panel.append(element("h2", "A1 서버 대시보드"), element("p", "4 OCPU · 24GB RAM · 서버 전체 사용량", "host-subtitle"));
+  panel.append(element("h2", "서버 대시보드"), element("p", "연결된 호스트 전체 사용량", "host-subtitle"));
   if (!snapshot.available || snapshot.scope !== "a1-host") {
     panel.append(element("p", "최신 서버 상태를 받지 못했습니다. 잠시 후 자동으로 다시 확인합니다.", "host-warning"));
   } else {
@@ -581,7 +581,7 @@ function renderHostDashboard(snapshot) {
     const cards = element("div", "", "host-cards");
     const metrics = [
       ["CPU", `${format(snapshot.cpuUsedPercent)}%`, `${snapshot.cpuCount} OCPU 전체`, snapshot.cpuUsedPercent],
-      ["메모리", `${format(snapshot.memoryUsedGiB)} GiB`, `OS 사용 가능 ${format(snapshot.memoryTotalGiB)} GiB / 설정 24GB`, snapshot.memoryUsedGiB / snapshot.memoryTotalGiB * 100],
+      ["메모리", `${format(snapshot.memoryUsedGiB)} GiB`, `OS 사용 가능 ${format(snapshot.memoryTotalGiB)} GiB`, snapshot.memoryUsedGiB / snapshot.memoryTotalGiB * 100],
       ["전체 디스크", `${format(snapshot.diskUsedPercent)}%`, `${format(snapshot.diskUsedGiB)} / ${format(snapshot.diskTotalGiB)} GiB 사용`, snapshot.diskUsedPercent],
     ];
     for (const [label,value,detail,percent] of metrics) {

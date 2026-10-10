@@ -4,7 +4,11 @@
 
 ## 저장/배포
 
-모델 키는 서버의 `apps/community/deploy/.env.providers`(0600)에 보관한다. Compose 선택적 env_file로 앱에만 전달한다. 개인 연결은 데이터 볼륨의 `/data/private-integrations.json`(1000:1000,0600)에 보관하며 `COMMUNITY_INTEGRATIONS_FILE`로 지정한다. 두 파일 모두 Git, 이미지, 빌드 컨텍스트 밖에 둔다. 기존 파일은 교체 전에 백업한다. 원본 로컬 AGY 보관소는 수정하지 않는다.
+각 설치의 운영자가 자신의 모델 키와 외부 서비스 계정을 등록한다. [빈 연결 예시](../integrations.example.json)를 Git에서 제외한 비공개 경로에 복사하고 필요한 값만 채운 뒤 `COMMUNITY_INTEGRATIONS_FILE`에 그 파일의 절대 경로를 지정한다. 예시 자체는 모든 인증 값이 비어 있다.
+
+모델 환경 변수는 서버의 비공개 env 파일로 전달한다. Compose를 사용하는 경우 자신의 private manifest에서 env 파일과 Vault의 읽기 범위를 지정한다. Vault 파일은 앱 실행 계정만 읽고 필요한 토큰 갱신을 저장할 수 있도록 소유권과 `0600` 권한을 설정한다. 실제 경로·계정·키는 공개 템플릿에 고정하지 않는다.
+
+두 설정은 Git·이미지·빌드 컨텍스트 밖에서 관리한다. 기존 설치의 원본 파일은 변경 전에 별도로 백업하고 운영 중인 키를 임의로 삭제하거나 새 예시로 덮어쓰지 않는다. 선택적 관리자 개인 맥락은 `COMMUNITY_AGENT_CONTEXT_FILE`로 명시하며, Fork의 기본값은 비활성 상태다.
 
 ## 모델
 

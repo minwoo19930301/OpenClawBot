@@ -5,7 +5,7 @@ ROOT=pathlib.Path('/var/lib/community-desktops')
 SOCKET='/run/community-provisioner/control.sock'
 ROOM=re.compile(r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$')
 MAX_STORED=4
-MAX_RUNNING=2 # dynamic desktops; the existing legacy desktop is additional
+MAX_RUNNING=2 # optional dynamic desktops; the shared desktop is additional
 IDLE=900
 LOCK=threading.Lock()
 LEASES={}
@@ -16,6 +16,13 @@ def name(room): return 'desktop-'+room
 def state(room):
     try: return json.loads(docker('inspect',name(room)))[0]
     except subprocess.CalledProcessError: return None
+def whole_host_cpu(value):
+    parts=value.split()
+    if len(parts)!=2: return False
+    try:
+        period=int(parts[1])
+        return period>0 and (parts[0]=='max' or int(parts[0]) >= (os.cpu_count() or 1)*period)
+    except ValueError: return False
 def ensure(room):
     with LOCK:
         ROOT.mkdir(parents=True,exist_ok=True)
@@ -23,7 +30,7 @@ def ensure(room):
         if pathlib.Path('/sys/fs/cgroup/community.slice/memory.max').read_text().strip()!='max': raise Capacity('서버 자원 제한을 확인할 수 없습니다.')
         guard=run('nft','list','table','inet','community_desktop_guard')
         if '172.30.50.0/28' not in guard or '172.30.50.2' not in guard: raise Capacity('독립 데스크톱 네트워크 보호 설정 확인이 필요합니다.')
-        if pathlib.Path('/sys/fs/cgroup/community.slice/cpu.max').read_text().split()!=['400000','100000']: raise Capacity('CPU 합산 제한 확인이 필요합니다.')
+        if not whole_host_cpu(pathlib.Path('/sys/fs/cgroup/community.slice/cpu.max').read_text()): raise Capacity('CPU 합산 제한 확인이 필요합니다.')
         entries=sorted(p for p in ROOT.iterdir() if p.is_dir() and ROOM.fullmatch(p.name))
         folder=ROOT/room
         info=state(room)
@@ -54,7 +61,7 @@ def ensure(room):
               '--network','community-desktop','--ip','172.30.50.'+str(slot),'--network-alias',name(room),
               '--cgroup-parent','community.slice','--memory','2g','--memory-swap','2g','--cpus','1','--pids-limit','256',
               '--shm-size','128m','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges:true',
-              '--security-opt','seccomp=/home/opc/community/apps/community/deploy/desktop/seccomp-chromium.json',
+              '--security-opt','seccomp=/etc/openclaw/seccomp-chromium.json',
               '--volume',str(home)+':/home/desktop:Z',
               '--tmpfs','/tmp:rw,size=128m,mode=1777','--tmpfs','/run/desktop:rw,size=32m,uid=10001,gid=10001,mode=700',
               '--log-opt','max-size=5m','--log-opt','max-file=2','community-desktop:managed')

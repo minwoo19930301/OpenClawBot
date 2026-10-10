@@ -20,6 +20,10 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - name: Verify portable fork defaults
+        run: |
+          node --test scripts/test-audit-fork.mjs
+          node scripts/audit-fork.mjs
       - name: Install dependencies
         run: npm ci --ignore-scripts
       - name: Build
@@ -29,7 +33,10 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
       - name: Validate deployment command
-        run: python3 -m unittest discover -s scripts/deploy -p 'test_*.py'
+        run: |
+          python3 -m unittest discover -s scripts/deploy -p 'test_*.py'
+          python3 -m unittest discover -s apps/community/deploy -p 'test_configuration.py'
+          python3 -m unittest discover -s apps/community/deploy/provisioner -p 'test_service.py'
       - name: Test native workspace bridge
         run: |
           python3 -m venv "$RUNNER_TEMP/workspace-tests"
@@ -38,7 +45,7 @@ jobs:
 
   deploy:
     needs: verify
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.OCI_DEPLOY_READY == 'true'
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.OCI_DEPLOY_READY == 'true' && vars.OCI_DEPLOY_REPOSITORY == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 25
     concurrency:
@@ -46,35 +53,43 @@ jobs:
       cancel-in-progress: false
     environment:
       name: production
-      url: https://168.107.91.96/
+      url: ${{ vars.OCI_PUBLIC_ORIGIN }}
     steps:
       - uses: actions/checkout@v4
       - name: Deploy tested main commit
         env:
           SSH_KEY: ${{ secrets.OCI_DEPLOY_SSH_KEY }}
-          KNOWN_HOSTS: ${{ vars.OCI_KNOWN_HOSTS }}
+          OCI_KNOWN_HOSTS: ${{ vars.OCI_KNOWN_HOSTS }}
+          OCI_DEPLOY_REPOSITORY: ${{ vars.OCI_DEPLOY_REPOSITORY }}
+          OCI_DEPLOY_HOST: ${{ vars.OCI_DEPLOY_HOST }}
+          OCI_DEPLOY_USER: ${{ vars.OCI_DEPLOY_USER }}
+          OCI_PUBLIC_ORIGIN: ${{ vars.OCI_PUBLIC_ORIGIN }}
           RELEASE: ${{ github.sha }}
         shell: bash
         run: |
           set -euo pipefail
+          python3 scripts/deploy/workflow_config.py
+          test -n "$SSH_KEY"
+          target="$OCI_DEPLOY_USER@$OCI_DEPLOY_HOST"
           umask 077
           key="$RUNNER_TEMP/oci-deploy-key"
           hosts="$RUNNER_TEMP/oci-known-hosts"
           trap 'rm -f "$key" "$hosts"' EXIT
           printf '%s\n' "$SSH_KEY" > "$key"
-          printf '%s\n' "$KNOWN_HOSTS" > "$hosts"
+          printf '%s\n' "$OCI_KNOWN_HOSTS" > "$hosts"
           args=(-i "$key" -o BatchMode=yes -o StrictHostKeyChecking=yes
                 -o UserKnownHostsFile="$hosts" -o ConnectTimeout=20
                 -o ServerAliveInterval=30 -o ServerAliveCountMax=10)
-          if ssh "${args[@]}" opc@168.107.91.96 id > "$RUNNER_TEMP/deploy-boundary-check" 2>&1; then
+          if ssh "${args[@]}" "$target" id > "$RUNNER_TEMP/deploy-boundary-check" 2>&1; then
             echo 'Deployment key unexpectedly permits arbitrary commands.'
             exit 1
           fi
           grep -q 'Expected a full lowercase Git commit SHA' "$RUNNER_TEMP/deploy-boundary-check"
           rm -f "$RUNNER_TEMP/deploy-boundary-check"
           echo 'Restricted deployment key verified.'
-          ssh "${args[@]}" opc@168.107.91.96 "$RELEASE"
+          ssh "${args[@]}" "$target" "$RELEASE"
       - name: Verify public HTTPS release and assets
         env:
           EXPECTED_SHA: ${{ github.sha }}
+          OCI_PUBLIC_ORIGIN: ${{ vars.OCI_PUBLIC_ORIGIN }}
         run: python3 scripts/deploy/verify-public.py

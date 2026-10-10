@@ -9,18 +9,18 @@ Keep the existing deployment usable while applying the requested customization. 
 
 ## Establish the target
 
-- Locate the repository via its Git remote, currently `minwoo19930301/OpenClawBot`; a local checkout can still be named `open-grokbot`. Preserve the upstream remote, attribution and GPL license. GitHub renaming does not detach a fork.
-- Inspect `apps/community/deploy/compose.yml`, the active Caddy configuration and the live `/api/health` release. Treat old reports as leads, not current-state proof.
+- Locate the user-selected checkout and inspect its Git remote. For a fork, use the operator's own repository and private deployment configuration; no repository owner or server target is built in. Preserve the upstream remote, attribution and GPL license.
+- Inspect the portable templates and the operator-selected private configuration. Automated releases use `/etc/openclaw/deployment.json` and `/etc/openclaw/compose.yml`; see `scripts/deploy/README.md`. Verify the configured origin against its live `/api/health` release. Treat old reports as leads, not current-state proof.
 - Use existing SSH and DNS credentials without printing values. Read only relevant configuration and report provider/model names or credential presence, not secret contents.
 - Keep the user's established VM sizing unless the request changes it. A1 region capacity, subscription limits and free allowances are separate questions; check the actual tenancy and current Oracle terms before claiming a change is free. Do not downgrade, upgrade PAYG or create a replacement VM merely to troubleshoot the application.
 
 ## Operating boundaries
 
-- The website uses its own OpenClaw gateway, state volume and authentication. The personal Telegram service is separate. Reuse neither its history nor its complete private workspace for community members.
+- Keep application authentication and data separate from unrelated services. When using OpenClaw, use a dedicated gateway and state volume. Personal service history and private agent workspaces must not be inherited by community members.
 - The shared desktop is a Linux GUI container inside the VM, not a host administration console. Use the official Google Chrome package matching the CPU architecture. Verify the installed binary, sandbox and live desktop; a Chromium binary is not evidence of Google Chrome.
 - Keep VNC/CDP behind the authenticated room proxy, preserve room membership checks, short-lived tickets, the desktop egress firewall, non-root execution and the browser sandbox. Never solve a Chrome startup failure with `--no-sandbox` or privileged Docker.
-- A desktop is provisioned per mapped room. Creating a new chat room does not create a VM/container automatically. Desktop profiles/downloads are ephemeral; accounts, messages and attachments live in the persistent application volume.
-- Model credentials, OpenClaw tokens, invitation codes, VAPID private keys and push subscription keys stay in existing server-side stores. Never archive `.env*` secrets, databases or user attachments into Git or the Docker build context.
+- The operator configures a shared workspace or individual room mappings. Creating a new chat does not create a VM/container automatically. Preserve existing mounts and data; profile/file persistence follows the operator's volume configuration.
+- Model credentials, OpenClaw tokens, invitation codes, VAPID private keys and push subscription keys stay in the operator's server-side environment files or private vault. Use an explicit `COMMUNITY_INTEGRATIONS_FILE` for service connections. Never archive secrets, databases, user attachments or private context into Git or the Docker build context.
 
 ## Choose the relevant procedure
 
@@ -36,4 +36,4 @@ The check verifies public HTTPS, release identity, OpenClaw configuration, the P
 
 ## Finish with evidence
 
-State which release and URL are live, what actually passed, and what remains dependent on the user's device or account access. A healthy process or “OpenClaw connected” label is not a successful chat response. Preserve concrete limitations such as no image recognition/audio transcription and manual provisioning for new room desktops.
+State which release and operator-configured URL are live, what actually passed, and what remains dependent on the user's device or account access. A healthy process or connection label is not a successful chat response. Report limitations from the current code and configuration, and verify model/media/workspace features affected by a change.

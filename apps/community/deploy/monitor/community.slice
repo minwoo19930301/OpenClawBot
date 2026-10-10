@@ -3,7 +3,7 @@ Description=Aggregate resource budget for all OpenClawBot containers
 [Slice]
 CPUAccounting=true
 MemoryAccounting=true
-CPUQuota=400%
+CPUQuota=infinity
 MemoryHigh=infinity
 MemoryMax=infinity
 MemorySwapMax=0

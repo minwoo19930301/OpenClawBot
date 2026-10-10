@@ -5,6 +5,7 @@ After=docker.service firewalld.service network-online.target
 Wants=network-online.target
 
 [Service]
+EnvironmentFile=/etc/openclaw/desktop-network.env
 Type=oneshot
 ExecStart=/usr/local/sbin/community-desktop-guard
 RemainAfterExit=yes

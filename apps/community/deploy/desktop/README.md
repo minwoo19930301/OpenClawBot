@@ -1,6 +1,6 @@
 # Private browser desktop container
 
-This directory is a multi-architecture (`linux/amd64` and `linux/arm64`) Debian desktop image for a separately authenticated application proxy. It downloads the official Google Chrome package for the target architecture and starts Google Chrome under Xvfb and Openbox, includes an `xterm` terminal for the remote Linux desktop, serves the VNC display through websockify/noVNC, and exposes Chrome DevTools Protocol (CDP) on the private container network and host loopback only. The ARM64 image was verified on the existing Oracle Linux OCI host with Google Chrome `153.0.8010.52`: sandboxed startup, CDP navigation/screenshot, and the VNC handshake passed. The official `current` download tracks stable Chrome on a fresh build; retain the image digest and previous image for release rollback.
+This directory is a multi-architecture (`linux/amd64` and `linux/arm64`) Debian desktop image for a separately authenticated application proxy. It downloads the official Google Chrome package for the target architecture and starts Google Chrome under Xvfb and Openbox, includes an `xterm` terminal for the remote Linux desktop, serves the VNC display through websockify/noVNC, and exposes Chrome DevTools Protocol (CDP) on the private container network and host loopback only. Verify sandboxed startup, CDP navigation/screenshot and the VNC handshake on your target architecture before release. The official `current` download tracks stable Chrome on a fresh build; retain the image digest and previous image for release rollback.
 
 The internal endpoints are:
 
@@ -12,7 +12,7 @@ The internal endpoints are:
 
 The community application must perform authentication and authorization before proxying the websocket. The desktop service itself has no user-account or token endpoint. The example publishes ports on host loopback for host diagnostics; in the production Compose deployment the app reaches the desktop over the dedicated `community-desktop` network, using the desktop service hostname and internal ports (`6080` for VNC and `9222` for CDP), while WAN clients cannot reach that network. Google Chrome itself listens on container loopback port `9223`; a `socat` bridge provides the container `9222` endpoint. Restrict the proxy to the intended Chrome target and commands.
 
-Required runtime inputs are `DESKTOP_START_URL` (default `about:blank`) and, optionally, `DESKTOP_SCREEN` (default `1280x800x24`). The example also makes the internal ports explicit through `DESKTOP_VNC_PORT`, `DESKTOP_WEBSOCKET_PORT`, and `DESKTOP_CDP_PORT` defaults in the image. There are no credentials in this container. The app uses `COMMUNITY_DESKTOP_MAP` with a room UUID and the corresponding desktop service hostname; see the parent deployment README. For the containerized app, set `COMMUNITY_HOST=0.0.0.0`; the local-development `.env.example` loopback bind is not suitable inside this container.
+Required runtime inputs are `DESKTOP_START_URL` (default `about:blank`) and, optionally, `DESKTOP_SCREEN` (default `1280x800x24`). The example also makes the internal ports explicit through `DESKTOP_VNC_PORT`, `DESKTOP_WEBSOCKET_PORT`, and `DESKTOP_CDP_PORT` defaults in the image. Application and provider keys are not passed into this container; browser login state may be stored in its shared home. The app uses `COMMUNITY_DESKTOP_MAP` with a room UUID and the corresponding desktop service hostname; see the parent deployment README. For the containerized app, set `COMMUNITY_HOST=0.0.0.0`; the local-development `.env.example` loopback bind is not suitable inside this container.
 
 Run from this directory with an already installed Docker/Compose:
 
@@ -21,7 +21,7 @@ docker compose -f compose.example.yml build
 docker compose -f compose.example.yml up -d
 ```
 
-Build both OCI architectures from a builder that supports them:
+Build both supported architectures from a builder that supports them:
 
 ```sh
 docker buildx build --platform linux/amd64,linux/arm64 -t registry.example/community-desktop:0.1 --push .
@@ -31,13 +31,15 @@ The Compose example applies a 2 GiB memory limit, one CPU, and a 256 PID limit, 
 
 The bridge needs internet for ordinary browser navigation. Before admitting users, install the reboot-persistent bridge sysctl, Docker forwarding drop-in, and `community-desktop-firewall.service`/`community-desktop-guard.sh` described below. Apply host firewall policy for the dedicated `172.30.50.0/28` subnet to block private, loopback, link-local, and OCI metadata destinations while allowing normal public egress. The deployed service uses the scoped nftables table described below; the legacy iptables helper is reference material only. It blocks the OCI metadata address, private networks and the host public IP for the desktop source while allowing established replies and public web traffic.
 
+First copy `desktop-network.env.example` to `/etc/openclaw/desktop-network.env`, owned by root with mode `0600`, and set `HOST_PUBLIC_IP` to your host’s public IPv4. Both the firewall service and Docker drop-in require this file; an empty or invalid address fails before applying rules. Do not install the Docker drop-in until this file and the guard script are ready. For a manual invocation, explicitly export `HOST_PUBLIC_IP`.
+
 For a reboot-persistent host installation, copy `99-community-desktop-bridge.conf` to `/etc/sysctl.d/99-community-desktop-bridge.conf` and persist `br_netfilter` in `/etc/modules-load.d/community-desktop.conf`, then run `modprobe br_netfilter` followed by `sysctl --system`. This makes same-bridge desktop egress visible to the scoped filter; IPv6 bridge filtering stays disabled because the Docker bridge is IPv4-only. Then copy `community-desktop-guard.sh` to `/usr/local/sbin/community-desktop-guard`, install `community-desktop-firewall.service`, and install the Docker drop-in from `docker-community-desktop-firewall.conf` as `/etc/systemd/system/docker.service.d/20-community-desktop-firewall.conf`. The service uses an independent `inet community_desktop_guard` nftables table with input/forward/output priority `-100`; `nft -f` replaces only this table in one transaction. Run `systemctl daemon-reload` and `systemctl enable --now community-desktop-firewall.service` after installation. It survives firewalld reload because firewalld owns separate tables. Established/related traffic is accepted before the desktop source filter, so app-to-desktop replies remain allowed. The legacy iptables helper remains for reference but is not required by this service.
 
 Google Chrome is deliberately started without `--no-sandbox`. Its Linux sandbox is a required security boundary. The image does not add `SYS_ADMIN` or a permissive security profile. If the target kernel or default seccomp/user-namespace policy prevents Chrome’s sandbox from starting, fail closed and fix host/runtime compatibility rather than disabling the sandbox.
 
-The earlier Chromium-based image on the tested Oracle Linux 9.8 ARM64 host hit Docker’s stock seccomp rejection for Chromium’s namespace setup. The verified profile derived from Docker/Moby’s default profile allows only these additional syscall names: `clone`, `clone3`, `unshare`, `setns`, `mount`, `umount2`, `pivot_root`, and `chroot`. Google Chrome `153.0.8010.52` was also verified with this profile and the sandbox enabled. Keep the default profile’s deny behavior and review the derived profile as a deployment artifact; do not replace it with `seccomp=unconfined` in production.
+The profile derived from Docker/Moby’s default profile allows these additional syscall names for Chrome namespace setup: `clone`, `clone3`, `unshare`, `setns`, `mount`, `umount2`, `pivot_root`, and `chroot`. Test Chrome with this profile and its sandbox enabled on your host. Keep the default profile’s deny behavior and review the derived profile as a deployment artifact; do not replace it with `seccomp=unconfined` in production.
 
-The design intentionally has no host mounts, Docker socket, host networking, public ports, or browser credentials. Loopback host bindings are reachable only by host-local processes; the community app container uses the private desktop network. Network controls are not a substitute for application authentication: the app must authenticate every desktop session and avoid forwarding arbitrary CDP traffic.
+The desktop has only its dedicated home storage mount, no Docker socket, no host networking, and no public ports. Browser credentials can persist inside the shared home when a user signs in. Loopback host bindings are reachable only by host-local processes; the community app container uses the private desktop network. Network controls are not a substitute for application authentication: the app must authenticate every desktop session and avoid forwarding arbitrary CDP traffic.
 
 References:
 
@@ -50,7 +52,7 @@ References:
 ## Common workspace with separate views
 When explicitly configured with COMMUNITY_SHARED_DESKTOP_ROOM=<existing mapped room UUID>, authenticated members of any room use that existing desktop. This is intentional shared workspace access: browser login state and files are common to its users. Room membership, session-bound one-use tickets and origin checks still apply. Service API secrets are not copied into the desktop.
 
-Enable COMMUNITY_DESKTOP_VIEWS=1 only after deploying the updated desktop entrypoint. Browser, Files and Terminal use three independent X displays in the same container and /home/desktop; switching the file view does not replace the browser screen. Websocket ports 6080–6082 are internal only. No additional public ports, privileged mode, sandbox bypass or VM is needed. Existing containers must be recreated with their current mounts and network configuration preserved; rebuilding the app alone does not enable these views.
+Enable COMMUNITY_DESKTOP_VIEWS=1 only after deploying the updated desktop entrypoint. Browser, Files and Terminal use three independent X displays in the same container and `/home/desktop`; switching the file view does not replace the browser screen. Websocket ports 6080–6082 are internal only. No additional public ports, privileged mode, sandbox bypass or VM is needed. Existing containers must be recreated with their current mounts and network configuration preserved; rebuilding the app alone does not enable these views.
 
 ## Native files and terminal transport
 

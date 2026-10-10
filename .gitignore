@@ -7,6 +7,7 @@ dist/
 .env
 .env.*
 !.env.example
+!.env.*.example
 .community-data/
 .community-preview/
 *.sqlite
@@ -15,3 +16,19 @@ dist/
 apps/community/public/vendor/
 
 __pycache__/
+
+# Operator-owned settings and vault data never belong in a fork.
+.openclaw-private/
+.oci/
+.ssh/
+secrets/
+vault/
+integrations.json
+credentials.json
+deployment.json
+BUSINESS_CONTEXT.md
+agent-context.md
+*.pem
+*.key
+*.p12
+*.pfx

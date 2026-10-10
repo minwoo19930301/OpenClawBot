@@ -14,7 +14,7 @@
 
 ## 제보 방법
 
-재현 가능한 보안 문제는 공개 이슈에 비밀값이나 개인 데이터를 포함하지 말고, GitHub의 private Security Advisory 기능을 사용해 [minwoo19930301/open-grokbot](https://github.com/minwoo19930301/open-grokbot)에 제보해 주세요. 계정 탈취, 방 간 데이터 노출, credential 노출, arbitrary desktop/CDP 접근은 공개 재현 코드보다 먼저 비공개로 알려야 합니다.
+재현 가능한 보안 문제는 공개 이슈에 비밀값이나 개인 데이터를 포함하지 말고, 사용 중인 저장소의 GitHub private Security Advisory 기능으로 관리자에게 제보해 주세요. 포크 운영자는 자신의 비공개 제보 경로를 설정해야 합니다. 계정 탈취, 방 간 데이터 노출, credential 노출, arbitrary desktop/CDP 접근은 공개 재현 코드보다 먼저 비공개로 알려야 합니다.
 
 제보에는 영향 범위, 재현 단계, 영향을 받는 파일 또는 endpoint, 완화 방법을 포함해 주세요. 실제 token·password·session cookie·첨부 파일을 붙이지 마세요. 운영 환경에서 발견한 문제라면 해당 credential을 즉시 폐기·교체하고, 공개 URL의 운영 상태는 별도로 확인해야 합니다.
 
@@ -28,3 +28,5 @@ npm test -w @open-grokbot/community
 ```
 
 `.env`, SQLite 데이터베이스/WAL, preview 상태와 생성된 vendor 번들은 Git과 Docker context에서 제외해야 합니다. 배포 문서의 host·region·room mapping·SSH 경로 같은 운영 metadata도 공개 전에 일반화하세요.
+
+개인 지식 문서는 기본 지시문으로 자동 탐색하지 않습니다. 필요한 운영자만 비공개 파일을 `COMMUNITY_AGENT_CONTEXT_FILE`로 지정하며, 관리자 개인 대화에만 전달합니다. `.openclaw-private/`, 키 파일, `integrations.json`, 개인 지식 문서는 Git과 Docker context에서 제외합니다. 현재 파일을 정리해도 이전 Git 커밋·포크·이미지에 있던 사본까지 제거되지는 않습니다.

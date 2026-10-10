@@ -1,0 +1,39 @@
+# Local app-only entry point. Use compose.yml for a configured HTTPS deployment.
+name: customcloudbot-local
+services:
+  app:
+    build:
+      context: ../../..
+      dockerfile: apps/community/deploy/Dockerfile
+      args:
+        RELEASE: ${COMMUNITY_RELEASE:-development}
+    image: customcloudbot-app:local
+    init: true
+    restart: unless-stopped
+    env_file:
+      - ${COMMUNITY_ENV_FILE:-.env.portable}
+    environment:
+      # HTTP is for this host-loopback entry point only.
+      NODE_ENV: development
+      COMMUNITY_HOST: 0.0.0.0
+      COMMUNITY_PORT: '8787'
+      COMMUNITY_DATA_DIR: /data
+      COMMUNITY_ORIGIN: ${COMMUNITY_ORIGIN:?Set the local HTTP origin}
+      COMMUNITY_BOOTSTRAP_TOKEN: ${COMMUNITY_BOOTSTRAP_TOKEN:?Generate a private first-admin invitation}
+    ports:
+      - '127.0.0.1:8787:8787'
+    volumes:
+      - app-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    pids_limit: 128
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+volumes:
+  app-data:

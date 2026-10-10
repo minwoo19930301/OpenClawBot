@@ -29,7 +29,7 @@ export function validateSubscription(value) {
 }
 const asSubscription = row => ({ endpoint: row.endpoint, keys: { p256dh: row.p256dh, auth: row.auth } });
 
-export function createPushService({ db, env, concurrency = 4, sendImpl } = {}) {
+export function createPushService({ db, env, concurrency = 4, getName = () => "CustomCloudBot", sendImpl } = {}) {
   const values = [env.COMMUNITY_PUSH_PUBLIC_KEY, env.COMMUNITY_PUSH_PRIVATE_KEY, env.COMMUNITY_PUSH_SUBJECT];
   const configured = values.every(Boolean);
   if (values.some(Boolean) && !configured) throw new Error("Incomplete Web Push configuration");
@@ -84,12 +84,12 @@ export function createPushService({ db, env, concurrency = 4, sendImpl } = {}) {
       JOIN room_members m ON m.room_id=? AND m.user_id=s.user_id
       WHERE x.expires_at>? AND (s.expiration_time IS NULL OR s.expiration_time>?)
       AND (s.room_id IS NULL OR s.room_id=?) LIMIT 256`).all(roomId, Date.now(), Date.now(), roomId);
-    const payload = JSON.stringify({ title: "OpenClawBot", body: kind === "bot" ? "새로운 봇 답변이 도착했습니다." : "새로운 메시지가 도착했습니다.", url: `/?room=${encodeURIComponent(roomId)}`, tag: `room-${roomId}` });
+    const payload = JSON.stringify({ title: getName(), body: kind === "bot" ? "새로운 봇 답변이 도착했습니다." : "새로운 메시지가 도착했습니다.", url: `/?room=${encodeURIComponent(roomId)}`, tag: `room-${roomId}` });
     await Promise.allSettled(rows.filter(row => !(kind === "human" && row.user_id === authorId)).map(row => enqueue(() => sendRow(row, payload, roomId))));
   }
   async function sendTest(row) {
     if (!configured) throw new Error("Push is unavailable");
-    return enqueue(() => sendRow(row, JSON.stringify({ title: "OpenClawBot", body: "푸시 알림 테스트입니다.", tag: "push-test", url: "/" })));
+    return enqueue(() => sendRow(row, JSON.stringify({ title: getName(), body: "푸시 알림 테스트입니다.", tag: "push-test", url: "/" })));
   }
   async function close() {
     closed = true;

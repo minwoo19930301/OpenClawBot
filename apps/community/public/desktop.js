@@ -20,12 +20,12 @@ async function boundedFile(url,signal,max=8*1024*1024) {
   return new Blob(parts,{type:response.headers.get('content-type')||'application/octet-stream'});
 }
 
-/** Three direct views of the shared OCI workspace, scoped to the current room. */
+/** Three direct views of the shared workspace, scoped to the current room. */
 export function createDesktopUI({api,getRoomId,toast=()=>{},mount=null,initialView='browser',onViewChange=()=>{}}) {
   const state={roomId:null,view:VIEWS.some(([id])=>id===initialView)?initialView:'browser',generation:0,abort:null,cleanup:null,destroyed:false,paths:new Map()};
   const topbar=mount?.querySelector('.pane-bar')||document.querySelector('.topbar-actions');
   const toggle=actionButton('작업 공간 열기','▣');toggle.className='icon-button desktop-button';toggle.setAttribute('aria-expanded','false');topbar?.append(toggle);
-  const panel=el('aside',undefined,'desktop-panel'+(mount?' desktop-inline':''));panel.setAttribute('aria-label','OCI 작업 공간');panel.hidden=true;
+  const panel=el('aside',undefined,'desktop-panel'+(mount?' desktop-inline':''));panel.setAttribute('aria-label','작업 공간');panel.hidden=true;
   const head=el('div',undefined,'desktop-head'),title=el('strong','작업 공간'),close=actionButton('작업 공간 닫기','×');close.classList.add('workspace-close');head.append(title,close);
   const tabs=el('div',undefined,'workspace-tabs');tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label','작업 공간 보기');
   const buttons=new Map();
@@ -54,7 +54,7 @@ export function createDesktopUI({api,getRoomId,toast=()=>{},mount=null,initialVi
       if(state.view==='browser')state.cleanup=mountBrowser(base,generation,abort.signal);
       else if(state.view==='files')state.cleanup=mountFiles(base,roomId,generation,abort.signal);
       else{
-        const terminal=el('div',undefined,'workspace-terminal');terminal.setAttribute('aria-label','OCI 터미널');content.replaceChildren(terminal);
+        const terminal=el('div',undefined,'workspace-terminal');terminal.setAttribute('aria-label','터미널');content.replaceChildren(terminal);
         const instance=await createWorkspaceTerminal({mount:terminal,api,roomId,signal:abort.signal,onStatus:(message,kind)=>{if(current(generation))setStatus(message,kind);}});
         if(!current(generation)){instance.dispose();return;}state.cleanup=()=>instance.dispose();
       }

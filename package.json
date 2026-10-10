@@ -1,9 +1,9 @@
 {
-  "name": "open-grokbot",
+  "name": "custom-cloud-bot",
   "version": "0.1.0",
   "private": true,
   "license": "GPL-3.0-only",
-  "description": "Open-source multi-agent coordination framework, clean-room reimplementation of the architecture of a modern desktop agent platform (Grok Bot class). No proprietary code included.",
+  "description": "Build your own cloud agent: choose your server, models, tools and private credentials.",
   "type": "module",
   "workspaces": [
     "packages/*",

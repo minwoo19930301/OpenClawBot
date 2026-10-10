@@ -32,3 +32,8 @@ agent-context.md
 *.key
 *.p12
 *.pfx
+
+# Encrypted setup Vault and key stay with the operator.
+**/setup-vault.json
+**/setup-vault.key
+**/setup-vault.json.*.tmp

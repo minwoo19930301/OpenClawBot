@@ -7,13 +7,14 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <meta name="description" content="초대 기반 공동 봇 대화" />
-    <link rel="preload" href="/icons/app-logo-v3-192.png" as="image">
+    <link rel="preload" href="/icons/cloud-agent-v1-192.png" as="image">
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="icon" href="/icons/app-logo-v3-192.png" type="image/png" />
-    <link rel="apple-touch-icon" href="/icons/app-logo-v3-180.png" />
-    <title>OpenClawBot</title>
+    <link rel="icon" href="/icons/cloud-agent-v1-48.png" type="image/png" sizes="48x48" />
+    <link rel="apple-touch-icon" href="/icons/cloud-agent-v1-180.png" sizes="180x180" />
+    <title>CustomCloudBot</title>
     <link rel="stylesheet" href="/styles.css" />
     <link rel="stylesheet" href="/desktop.css" />
+    <link rel="stylesheet" href="/setup.css" />
   </head>
   <body>
     <svg
@@ -70,16 +71,19 @@
       </symbol>
     </svg>
     <div id="app">
-      <section id="startup-view" class="startup-view" aria-label="OpenClawBot 불러오는 중">
-        <img class="icon agent-art startup-logo" src="/icons/app-logo-v3-192.png" alt="" width="96" height="96" fetchpriority="high" decoding="sync">
-        <strong>OpenClawBot</strong>
+      <section id="startup-view" class="startup-view" aria-label="CustomCloudBot 불러오는 중">
+        <img class="icon agent-art startup-logo" src="/icons/cloud-agent-v1-192.png" alt="" width="96" height="96" fetchpriority="high" decoding="sync" draggable="false">
+        <strong data-product-name>CustomCloudBot</strong>
         <p id="startup-status" role="status">내 공간을 불러오고 있어요</p>
         <button id="startup-retry" class="is-hidden" type="button">다시 시도</button>
         <noscript>JavaScript를 켜면 내 공간에 연결할 수 있습니다.</noscript>
       </section>
       <section id="auth-view" class="auth-view is-hidden" aria-labelledby="auth-title">
         <div class="auth-panel">
-          <h1 id="auth-title">OpenClawBot</h1>
+          <div class="auth-brand">
+            <img class="brand-art auth-logo" src="/icons/cloud-agent-v1-192.png" alt="" width="64" height="64" draggable="false">
+            <h1 id="auth-title" data-product-name>CustomCloudBot</h1>
+          </div>
           <p class="auth-description">초대받은 계정으로 로그인하세요.</p>
           <div class="auth-tabs" role="tablist" aria-label="인증 방식">
             <button
@@ -173,7 +177,7 @@
         <aside id="sidebar" class="sidebar" aria-label="대화 목록">
           <div id="sidebar-resizer" class="sidebar-resizer" role="separator" tabindex="0" aria-label="대화 목록 너비 조절" aria-controls="sidebar" aria-orientation="vertical" aria-valuemin="200" aria-valuemax="420" aria-valuenow="280" aria-disabled="true"></div>
           <div class="sidebar-top">
-            <span class="app-name">OpenClawBot</span>
+            <span class="app-name"><img class="brand-art sidebar-logo" src="/icons/cloud-agent-v1-192.png" alt="" width="30" height="30" draggable="false"><span data-product-name>CustomCloudBot</span></span>
             <div class="sidebar-actions">
               <button
                 id="create-room-button"
@@ -249,7 +253,7 @@
             </button>
             <div class="header-identity">
               <span class="header-avatar"
-                ><img class="icon agent-art" src="/icons/agent-bot-v2.png" alt=""></span>
+                ><img class="icon agent-art" src="/icons/cloud-agent-v1-192.png" alt="" width="28" height="28" draggable="false"></span>
               <h1 id="room-title">대화</h1>
             </div>
             <span id="mobile-room-title" class="sr-only"></span
@@ -269,7 +273,7 @@
                 aria-label="참여자 보기"
                 title="참여자"
               >
-                <img class="icon agent-art" src="/icons/agent-bot-v2.png" alt=""><span id="member-count">0</span></button
+                <img class="icon agent-art" src="/icons/cloud-agent-v1-192.png" alt="" width="28" height="28" draggable="false"><span id="member-count">0</span></button
               ><button
                 id="room-invite-button"
                 class="icon-button is-hidden"

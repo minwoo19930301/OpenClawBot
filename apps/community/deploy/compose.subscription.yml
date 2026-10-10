@@ -1,0 +1,8 @@
+# Optional override for official CLI OAuth into the dedicated Gateway.
+# Merge AFTER compose.yml. Seed the config once, then run the login helper.
+services:
+  openclaw:
+    environment:
+      OPENCLAW_CONFIG_PATH: /home/node/.openclaw/openclaw.json
+    volumes:
+      - ./openclaw/subscription.json.example:/etc/openclaw/subscription.example.json:ro,Z

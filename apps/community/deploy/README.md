@@ -1,8 +1,19 @@
-# Self-hosted Docker deployment
+# CustomCloudBot self-hosted Docker deployment
 
 These files are templates for your own Linux host. They contain no configured server, cloud account, domain, workspace UUID or model provider. Docker Compose does not create a cloud VM, disk, DNS record or paid subscription. Choose the host and its billing limits separately.
 
 The application, shared desktop, Caddy and optional OpenClaw gateway use separate containers. This is an invite-only workspace: invited users share the configured desktop's browser logins and files, while chat membership and session authorization remain enforced. Do not expose the desktop to users who should not share that computer.
+
+## Local app-only start
+
+For an initial local installation, use `compose.portable.yml`. Copy `.env.portable.example` to `.env.portable`, set mode `0600`, and supply a new `COMMUNITY_BOOTSTRAP_TOKEN`. The example origin is `http://127.0.0.1:8787`.
+
+```sh
+docker compose --env-file .env.portable -f compose.portable.yml config --quiet
+docker compose --env-file .env.portable -f compose.portable.yml up -d --build
+```
+
+This publishes only `127.0.0.1:8787`, persists application data in a named volume, and has no desktop, cloud account, Docker socket or `community.slice` dependency. HTTP mode is for local use; do not change its loopback port to a public bind. For a differently named environment file, set `COMMUNITY_ENV_FILE` to that path and use the same path with `--env-file` (relative paths are resolved from this directory). Configure the bot after administrator signup, then use the HTTPS deployment below when ready to publish. The local data volume and production data volume are separate; preserve and explicitly migrate the data if moving an existing installation.
 
 ## Required configuration
 
@@ -35,7 +46,7 @@ docker compose --env-file .env.production up -d --no-build
 
 Always pass `--env-file`: the file provides Compose interpolation as well as container environment values. Avoid printing expanded production configuration because it includes credentials. Missing required deployment values fail before container creation. A domain must resolve to the host before HTTPS issuance; the IP configuration requests a short-lived ACME certificate for the explicitly configured IP.
 
-The first signup with the bootstrap invitation creates the administrator. Later accounts use site invitations. Keep the database, media, Caddy state, `.env.production` and any optional vault/gateway environment backed up. Never use `down -v` as a routine upgrade command.
+The first signup with the bootstrap invitation creates the administrator. Later accounts use site invitations. Keep the database, media, Caddy state, `.env.production` and any optional vault/gateway environment backed up. Settings entered through **내 봇 설정** use `COMMUNITY_DATA_DIR/setup-vault.json` and `setup-vault.key`; preserve both together. The setup screen records cloud/domain/mail metadata but does not provision cloud resources or modify DNS. Never use `down -v` as a routine upgrade command.
 
 ## Optional models and integrations
 
@@ -47,7 +58,9 @@ To enable the isolated OpenClaw gateway:
 2. Set the same random `COMMUNITY_OPENCLAW_TOKEN` in both environment files. In `.env.production`, set `COMMUNITY_OPENCLAW_BASE_URL=http://openclaw:18890`, `COMMUNITY_OPENCLAW_AGENT_ID=community` and `COMMUNITY_OPENCLAW_ALLOW_PRIVATE_HTTP=1`.
 3. Start with `docker compose --env-file .env.production --profile openclaw up -d --no-build`.
 
-OpenClaw has a dedicated state volume and private network, no public gateway port, and built-in tools/plugins/browser/cron/hooks disabled. The application owns validated browser and service tool execution. Do not point this adapter at an unrelated personal gateway. Gateway configuration does not load when the `openclaw` profile is off, so optional AI fields are not required for an initial installation.
+For official Codex subscription OAuth instead of a provider key, merge `compose.subscription.yml` after the base manifest and follow [the subscription helper guide](../scripts/README.md). Its writable configuration lives inside the dedicated Gateway state volume and is seeded once without overwriting existing configuration. Official login chooses the default entitled model. CLI authentication for Claude or Gemini does not automatically connect those accounts to this Gateway.
+
+OpenClaw has a dedicated state volume and private network, no public gateway port, and built-in tools/browser/cron/hooks disabled. The API template disables plugins; the subscription template permits only the OpenAI provider plugin and pins its agent runtime to `openclaw`, keeping native Codex execution disabled. The application owns validated browser and service tool execution. Do not point this adapter at an unrelated personal gateway. Gateway configuration does not load when the `openclaw` profile is off, so optional AI fields are not required for an initial installation.
 
 For external services, start from [../integrations.example.json](../integrations.example.json), save the populated vault outside the checkout, and mount it only into the application at your chosen path. Set `COMMUNITY_INTEGRATIONS_FILE` to that in-container path. A separately mounted operator context file can be selected with `COMMUNITY_AGENT_CONTEXT_FILE`; it is disabled by default. Never mount either into the desktop. Configure any cloud account, mail, calendar, Meta or other API explicitly; templates contain no account credentials.
 
@@ -63,7 +76,7 @@ The shared desktop needs no dynamic provisioner. Leave `COMMUNITY_PROVISIONER_SO
 
 ## Releases and existing installations
 
-Use [the deployment automation guide](../../../scripts/deploy/README.md) for main-branch releases. Server-owned metadata in `/etc/openclaw/deployment.json` supplies the private Compose path, project name and desktop service. Keep the installed manifest root-owned outside the Git checkout. For a new installation, install your reviewed manifest at `/etc/openclaw/compose.yml`; choose its service name `desktop` in the private deployment metadata.
+Use [the deployment automation guide](../../../scripts/deploy/README.md) for main-branch releases. Automated releases require `COMMUNITY_DESKTOP_HOME=<shared_storage_root>/home` to be a mounted, bounded filesystem; a directory-only manual installation must prepare that storage before enabling automation, preserving existing files. Server-owned metadata in `/etc/openclaw/deployment.json` supplies the private Compose path, project name and desktop service. Keep the installed manifest root-owned outside the Git checkout. For a new installation, install your reviewed manifest at `/etc/openclaw/compose.yml`; choose its service name `desktop` in the private deployment metadata.
 
 Before upgrading an existing installation that used a site-specific tracked manifest, preserve its working Compose file, selected Caddyfile and gateway JSON outside the repository. The private manifest should mount `/etc/openclaw/Caddyfile` and `/etc/openclaw/openclaw.json`. Keep its existing desktop service name, environment files, home mount, network and volumes. Merely replacing tracked examples is not a reason to recreate or migrate production data, rotate keys, or change the public origin. Existing installed host firewall units and collector settings must be updated deliberately, not overwritten from an example during an app release.
 

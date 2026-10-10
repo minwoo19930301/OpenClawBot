@@ -87,3 +87,85 @@ test('explicit model prefers its direct provider over a paid router duplicate',a
  const pool=createProviderPool({GROQ_API_KEY:'groq',OPENROUTER_API_KEY:'router'},async()=>modelsResponse(['qwen/test']));
  await pool.listModels();for(let i=0;i<5;i++)assert.deepEqual(pool.choose('qwen/test','').attempts.map(p=>p.provider),['groq']);
 });
+
+test('each custom endpoint keeps its own configured model ahead of shared defaults',async()=>{
+ const env={COMMUNITY_LLM_MODEL:'shared-default',CUSTOM_MODEL:'shared-default',COMMUNITY_LLM_PROVIDERS:JSON.stringify([
+  {name:'custom',baseUrl:'https://first.example/v1',apiKey:'first-private-key',model:'first-chat'},
+  {name:'custom',baseUrl:'https://second.example/v1',apiKey:'second-private-key',model:'second-chat'},
+ ])};
+ const pool=createProviderPool(env,async()=>modelsResponse(['shared-default','first-chat','second-chat']));
+ await pool.listModels();
+ assert.deepEqual(pool.providers.map(p=>p.model),['first-chat','second-chat']);
+ assert.deepEqual(pool.choose('','').attempts.map(p=>[p.baseUrl,p.model]),[
+  ['https://first.example/v1','first-chat'],['https://second.example/v1','second-chat'],
+ ]);
+});
+
+test('missing discovery endpoints expose configured models without claiming a verified catalog',async()=>{
+ for (const status of [404,405,501]) {
+  const pool=createProviderPool({COMMUNITY_LLM_PROVIDERS:JSON.stringify([
+   {name:'first',baseUrl:'https://first.example/v1',apiKey:'first-private-key',model:'first-chat'},
+   {name:'second',baseUrl:'https://second.example/v1',apiKey:'second-private-key',model:'second-chat'},
+  ])},async()=>modelsResponse([],status));
+  const listed=await pool.listModels();
+  assert.equal(listed.failures.length,2);assert.equal(listed.models.length,2);
+  assert.ok(listed.models.every(model=>model.configured===true));
+  assert.deepEqual(pool.choose('first-chat','').attempts.map(p=>p.apiKey),['first-private-key']);
+  assert.deepEqual(pool.choose('second-chat','').attempts.map(p=>p.apiKey),['second-private-key']);
+  assert.ok(publicModels(listed).every(model=>model.configured===true));
+  assert.match(formatModelList(listed),/수동 설정/);
+  assert.ok(!JSON.stringify(publicModels(listed)).includes('private-key'));
+ }
+});
+
+test('an explicitly empty successful catalog permits only the administrator configured model',async()=>{
+ const pool=createProviderPool({COMMUNITY_LLM_PROVIDERS:JSON.stringify([
+  {name:'custom',baseUrl:'https://custom.example/v1',apiKey:'private-key',model:'known-deployment'},
+ ])},async()=>modelsResponse([]));
+ const listed=await pool.listModels();
+ assert.equal(listed.models[0].configured,true);assert.equal(listed.failures.length,1);
+ assert.equal(pool.choose('','').model,'known-deployment');assert.equal(pool.choose('other',''),null);
+});
+
+test('auth, quota, server, network and invalid payload failures never use configured discovery fallback',async()=>{
+ const env={COMMUNITY_LLM_PROVIDERS:JSON.stringify([{name:'custom',baseUrl:'https://custom.example/v1',apiKey:'private-key',model:'known-deployment'}])};
+ const fetches=[...([401,403,429,500,503].map(status=>async()=>modelsResponse([],status))),
+  async()=>{throw Error('network unavailable');},async()=>({ok:true,status:200,json:async()=>({unexpected:true})})];
+ for (const fetchImpl of fetches) {
+  const pool=createProviderPool(env,fetchImpl);const listed=await pool.listModels();
+  assert.equal(listed.models.length,0);assert.equal(pool.choose('known-deployment',''),null);
+ }
+});
+
+test('configured fallback respects authentication/quota cooldown across catalog refresh',async()=>{
+ for (const status of [401,403,429]) {
+  const pool=createProviderPool({COMMUNITY_LLM_PROVIDERS:JSON.stringify([{name:'custom',baseUrl:'https://custom.example/v1',apiKey:'private-key',model:'known-deployment'}])},async()=>modelsResponse([],404));
+  await pool.listModels();const choice=pool.choose('','');
+  choice.onProviderFailure(choice,status,60000);
+  await pool.listModels();assert.equal(pool.choose('',''),null);assert.equal(pool.choose('known-deployment',''),null);
+ }
+});
+
+test('OpenRouter configured paid models remain excluded from automatic fallback',async()=>{
+ const pool=createProviderPool({OPENROUTER_API_KEY:'router-key',OPENROUTER_MODEL:'paid-model'},async()=>modelsResponse([],404));
+ const listed=await pool.listModels();assert.equal(listed.models[0].configured,true);
+ assert.equal(pool.choose('',''),null);assert.equal(pool.choose('paid-model','').model,'paid-model');
+});
+
+test('a discovered duplicate makes the public model verified while manual-only entries stay marked',()=>{
+ const models=publicModels({models:[
+  {id:'same',name:'same',provider:'manual',configured:true},
+  {id:'same',name:'same',provider:'discovered'},
+  {id:'manual-only',name:'manual-only',provider:'manual',configured:true},
+ ]});
+ assert.equal(models[0].configured,undefined);assert.equal(models[1].configured,true);
+});
+
+test('provider-specific models survive deduplication and invalid model identifiers are not used',()=>{
+ const providers=readProviders({COMMUNITY_LLM_BASE_URL:'https://custom.example/v1',COMMUNITY_LLM_API_KEY:'private-key',COMMUNITY_LLM_MODEL:'old-model',
+  COMMUNITY_LLM_PROVIDERS:JSON.stringify([
+   {name:'custom',baseUrl:'https://custom.example/v1',apiKey:'private-key',model:'provider-model'},
+   {name:'invalid',baseUrl:'https://other.example/v1',apiKey:'other-key',model:'bad\nmodel'},
+  ])});
+ assert.equal(providers.length,2);assert.equal(providers[0].model,'provider-model');assert.equal(providers[1].model,undefined);
+});

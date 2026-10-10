@@ -16,6 +16,8 @@
   --selected: #77777752;
   --bot-bubble: #262626;
   --own-bubble: #5a5a5a;
+  --brand-magenta: #f40758;
+  --brand-indigo: #4132a5;
   color: var(--text);
   background: var(--bg);
 }
@@ -74,16 +76,16 @@ button {
   background: var(--bg);
   transition: opacity 280ms ease, visibility 280ms;
 }
-.startup-view .startup-logo {
-  width: 64px;
-  height: 64px;
-  animation: startup-breathe 1.8s ease-in-out infinite;
+.startup-view .agent-art.startup-logo {
+  width: 96px;
+  height: 96px;
+  animation: none;
+  filter: drop-shadow(0 8px 24px #4132a526);
 }
 .startup-view strong { font-size: 20px; letter-spacing: -.5px; }
 .startup-view p { margin: 0; color: var(--muted); }
 .startup-view button { padding: 10px 20px; border-radius: 12px; background: var(--surface); }
 .startup-view.is-ready { opacity: 0; visibility: hidden; pointer-events: none; }
-@keyframes startup-breathe { 50% { opacity: .45; transform: translateY(-3px); } }
 @media (prefers-reduced-motion: reduce) {
   .startup-view { transition: none; }
   .startup-view .startup-logo { animation: none; }
@@ -195,10 +197,17 @@ button {
   flex-shrink: 0;
 }
 .app-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
   font-size: 14px;
   font-weight: 500;
   letter-spacing: -0.15px;
 }
+.app-name > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.brand-art { display: block; object-fit: contain; flex: 0 0 auto; }
+.sidebar-logo { width: 30px; height: 30px; }
 .sidebar-actions {
   display: flex;
   gap: 2px;
@@ -840,6 +849,8 @@ button {
 .auth-panel {
   width: min(320px, 100%);
 }
+.auth-brand { display: grid; justify-items: center; gap: 14px; }
+.auth-logo { width: 64px; height: 64px; filter: drop-shadow(0 6px 18px #f4075824); }
 .auth-panel h1 {
   margin: 0;
   font-size: 24px;
@@ -870,6 +881,7 @@ button {
   color: var(--text);
   border-bottom-color: var(--text);
 }
+.auth-tabs .tab-button.is-active { border-bottom-color: var(--brand-magenta); }
 .auth-form {
   display: flex;
   flex-direction: column;
@@ -1292,27 +1304,16 @@ button:active:not(:disabled) { filter:brightness(.9); }
 @keyframes agent-pulse {50%{opacity:.55}}
 @media(prefers-reduced-motion:reduce){.message-enter,.avatar-bot{animation:none!important}.pane-grid.docked>.room-view{transition:none!important}}
 
-/* Generated Agent Bot artwork and interaction motion. */
+/* Cloud agent artwork appears immediately; motion is limited to interaction. */
 .icon.agent-art { object-fit:contain; width:28px; height:28px; flex-shrink:0; transition:transform 360ms cubic-bezier(.22,1,.36,1),filter 360ms ease; }
 .avatar-bot { background:transparent; overflow:visible; }
 .avatar-bot .agent-art { width:34px; height:34px; }
-.startup-view .startup-logo { width:96px; height:96px; filter:drop-shadow(0 8px 24px #b8dfff20); animation:bot-float 2.4s ease-in-out infinite; }
-.startup-view strong, .startup-view p { animation:bot-reveal 650ms cubic-bezier(.22,1,.36,1) both; }
-.startup-view p { animation-delay:100ms; }
-button:hover .agent-art { transform:translateY(-2px) rotate(-5deg) scale(1.08); filter:drop-shadow(0 3px 8px #a8d7ff30); }
+.header-avatar { background: color-mix(in srgb, var(--brand-indigo) 7%, transparent); }
+button:hover .agent-art { transform:translateY(-2px) rotate(-5deg) scale(1.08); filter:drop-shadow(0 3px 8px #f4075830); }
 button:active .agent-art { transform:scale(.94); }
-.auth-panel { animation:bot-reveal 420ms cubic-bezier(.22,1,.36,1) both; }
-@keyframes bot-float { 0%,100% { transform:translateY(0) rotate(-2deg); } 50% { transform:translateY(-7px) rotate(2deg); } }
-@keyframes bot-reveal { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
 @media(prefers-reduced-motion:reduce) {
-  .agent-art,.startup-view strong,.startup-view p,.auth-panel { animation:none!important; transition:none!important; transform:none!important; }
+  .agent-art { animation:none!important; transition:none!important; transform:none!important; }
 }
-
-/* Show the startup artwork still, without entrance or floating effects. */
-.startup-view .startup-logo,.startup-view strong,.startup-view p { animation:none!important; transform:none!important; }
-
-.startup-logo { visibility:visible; }
-.startup-logo.is-decoded { visibility:visible; }
 
 /* Live host dashboard replaces the monitor chat transcript. */
 .is-host-dashboard .composer-dock { display:none; }

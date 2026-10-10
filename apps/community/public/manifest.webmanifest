@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "OpenClawBot",
-  "short_name": "OpenClawBot",
+  "name": "CustomCloudBot",
+  "short_name": "CustomCloudBot",
   "description": "초대 기반 공동 봇 대화",
   "lang": "ko",
   "start_url": "/",
@@ -10,7 +10,8 @@
   "background_color": "#070707",
   "theme_color": "#070707",
   "icons": [
-    { "src": "/icons/app-logo-v3-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "/icons/app-logo-v3-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "/icons/cloud-agent-v1-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/cloud-agent-v1-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/cloud-agent-v1-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

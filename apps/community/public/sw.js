@@ -25,13 +25,13 @@ self.addEventListener("push", (event) => {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) payload = {};
   const title = typeof payload.title === "string" && payload.title.trim()
     ? payload.title
-    : "OpenClawBot";
+    : "CustomCloudBot";
   const options = {
     body: typeof payload.body === "string" ? payload.body : "",
     tag: typeof payload.tag === "string" ? payload.tag : undefined,
     data: { url: safeUrl(payload.url) },
-    icon: "/icons/app-logo-v3-192.png",
-    badge: "/icons/app-logo-v3-192.png",
+    icon: "/icons/cloud-agent-v1-192.png",
+    badge: "/icons/cloud-agent-v1-48.png",
   };
   event.waitUntil(self.registration.showNotification(title, options));
 });

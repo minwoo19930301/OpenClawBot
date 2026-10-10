@@ -3,6 +3,7 @@ import { renderMessageText } from "/message-format.mjs";
 import { recommendedModels, modelLabel, filterModels } from "/model-picker.mjs";
 import { createDesktopUI } from "/desktop.js";
 import { createPwaController } from "/pwa.js";
+import { applyBrand, createBotSetupUI } from "/setup.js";
 
 let dockRects = [{x:0,y:0,w:1,h:1}];
 let pendingDock = null;
@@ -31,6 +32,7 @@ const state = {
 };
 let desktopUI;
 let pwaUI;
+let setupUI;
 const $ = (s, root = document) => root.querySelector(s);
 const $$ = (s, root = document) => [...root.querySelectorAll(s)];
 const els = {
@@ -118,6 +120,7 @@ function renderAgentLinks() {
   if(!links){links=document.createElement("div");links.id="agent-workspaces";links.className="agent-workspaces";els.roomList.before(links);}
   links.replaceChildren();
   if(state.session?.user?.role==="admin") {
+    const setup=document.createElement("button");setup.type="button";setup.textContent="내 봇 설정";setup.onclick=()=>void setupUI?.open();links.append(setup);
     const hub=document.createElement("button");hub.textContent="통합 관리";hub.onclick=openCapabilityHub;links.append(hub);
   }
   for(const room of state.rooms.filter(r=>!r.archived&&r.id===MONITOR_ROOM)) {
@@ -131,7 +134,9 @@ function icon(name) {
   if (name === "agent" || name === "spark") {
     const image = document.createElement("img");
     image.className = "icon agent-art";
-    image.src = "/icons/agent-bot-v2.png";
+    image.src = "/icons/cloud-agent-v1-192.png";
+    image.width = 28;
+    image.height = 28;
     image.alt = "";
     image.setAttribute("aria-hidden", "true");
     image.draggable = false;
@@ -173,6 +178,7 @@ async function loadSession() {
   $("#startup-status").textContent = "내 공간을 불러오고 있어요";
   try {
     state.session = await api("/api/session", { signal: AbortSignal.timeout(15000) });
+    applyBrand(state.session.brand);
     if (state.session.user) void enterWorkspace().catch(() => toast("대화 목록을 불러오지 못했습니다. 새로고침해주세요."));
     else showAuth();
     startup.classList.add("is-ready");
@@ -184,6 +190,7 @@ async function loadSession() {
 }
 $("#startup-retry").addEventListener("click", loadSession);
 function showAuth() {
+  setupUI?.reset();
   closeContextPopover();
   resetSidebarState();
   modelChanges.clear();
@@ -232,6 +239,7 @@ function showAuth() {
   setTimeout(() => $("#login-username")?.focus(), 0);
 }
 async function enterWorkspace() {
+  applyBrand(state.session.brand);
   els.auth.classList.add("is-hidden");
   els.workspace.classList.remove("is-hidden");
   const user = state.session.user;
@@ -242,7 +250,22 @@ async function enterWorkspace() {
     user.displayName || user.username,
   );
   $("#site-invite-button").classList.toggle("is-hidden", user.role !== "admin");
-  const model = state.session.model || {};
+  renderModelConnection();
+  pwaUI?.setSession(state.session);
+  resetSidebarState(user.id);
+  const workspaceEpoch=sidebarEpoch;
+  await Promise.all([loadSidebar(),loadRooms()]);
+  if(state.session?.user?.id!==user.id||sidebarEpoch!==workspaceEpoch)return;
+  setupUI?.maybePrompt();
+  try {
+    const catalog = await api("/api/models");
+    if(state.session?.user?.id!==user.id||sidebarEpoch!==workspaceEpoch)return;
+    applyModels(catalog.models);
+    if (!catalog.models.length) toast(!state.session.model?.configured ? "AI 연결을 설정해 주세요." : catalog.failures.length ? "모델 목록을 가져오지 못했습니다. 기본 모델로 연결됩니다." : "선택 가능한 API 모델이 없습니다. 기본 모델로 연결됩니다.");
+  } catch (error) { toast(error.message || "모델 목록을 불러오지 못했습니다."); }
+}
+function renderModelConnection() {
+  const model = state.session?.model || {};
   els.demoBadge.classList.toggle("is-hidden", !model.demo);
   els.modelWarning.classList.toggle("is-hidden", Boolean(model.configured) || Boolean(model.selectable));
   els.modelStatus.classList.toggle("is-hidden", !model.configured || Boolean(model.demo));
@@ -253,17 +276,19 @@ async function enterWorkspace() {
     : "";
   els.modelStatus.textContent = [connected, model.selectable ? "API 순환" : ""].filter(Boolean).join(" · ");
   els.modelStatus.classList.toggle("is-hidden", !els.modelStatus.textContent);
-  pwaUI?.setSession(state.session);
-  resetSidebarState(user.id);
-  const workspaceEpoch=sidebarEpoch;
-  await Promise.all([loadSidebar(),loadRooms()]);
-  if(state.session?.user?.id!==user.id||sidebarEpoch!==workspaceEpoch)return;
+}
+async function refreshSetupState(data, { connectionChanged }) {
+  const userId=state.session?.user?.id, workspaceEpoch=sidebarEpoch;
+  if(!userId||state.session.user.role!=="admin")return;
+  state.session.setupRequired=data.setupRequired===true;
+  if(data.profile?.displayName) {state.session.brand={...state.session.brand,name:data.profile.displayName};applyBrand(state.session.brand);}
+  if(!connectionChanged)return;
   try {
-    const catalog = await api("/api/models");
-    if(state.session?.user?.id!==user.id||sidebarEpoch!==workspaceEpoch)return;
-    applyModels(catalog.models);
-    if (!catalog.models.length) toast(catalog.failures.length ? "모델 목록을 가져오지 못했습니다. 기본 모델로 연결됩니다." : "선택 가능한 API 모델이 없습니다. 기본 모델로 연결됩니다.");
-  } catch (error) { toast(error.message || "모델 목록을 불러오지 못했습니다."); }
+    const [session,catalog]=await Promise.all([api("/api/session"),api("/api/models")]);
+    if(state.session?.user?.id!==userId||session.user?.id!==userId||workspaceEpoch!==sidebarEpoch)return;
+    state.session=session;applyBrand(session.brand);renderModelConnection();applyModels(catalog.models || []);
+    await loadRooms();
+  } catch { if(state.session?.user?.id===userId&&workspaceEpoch===sidebarEpoch)toast("연결 설정은 저장했습니다. 모델 목록은 새로고침 후 확인해주세요."); }
 }
 async function loadRooms() {
   const userId=state.session?.user?.id,epoch=sidebarEpoch;if(!userId)return;
@@ -2028,8 +2053,7 @@ function bind() {
 bind();
 pwaUI = createPwaController({ api, getSession: () => state.session, toast });
 desktopUI = createDesktopUI({ api, getRoomId: () => state.selectedRoom, toast });
-const startupArtwork = document.querySelector(".startup-logo");
-startupArtwork.decode().then(() => startupArtwork.classList.add("is-decoded")).catch(() => {});
+setupUI = createBotSetupUI({ api, getSession: () => state.session, onSaved: refreshSetupState, toast });
 loadSession();
 
 
